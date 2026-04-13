@@ -1,4 +1,4 @@
-const db = require("../../db/index.js");
+const db = require("../../db");
 const logger = require("../../utils/logger.js");
 
 const HINTABLE_FIELDS = new Set([

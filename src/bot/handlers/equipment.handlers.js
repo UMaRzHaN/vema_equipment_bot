@@ -1,11 +1,11 @@
-const { isAdmin } = require("../config.js");
+const { isAdmin } = require("../config");
 const logger = require("../../utils/logger.js");
-const { buildEditEquipmentKeyboard } = require("../views/menus.js");
+const { buildEditEquipmentKeyboard } = require("../views/menus");
 const {
   buildEquipmentMarkup,
   renderEquipmentCard,
-} = require("../views/equipment.view.js");
-const { ensureSession, nowIso } = require("../utils.js");
+} = require("../views/equipment.view");
+const { ensureSession, nowIso } = require("../utils");
 const {
   STATUS,
   completeRepair,
@@ -13,7 +13,7 @@ const {
   giveEquipmentToUser,
   removeEquipment,
   returnEquipmentFromUser,
-} = require("../../services/equipment.service.js");
+} = require("../../services/equipment.service");
 
 function rememberMessage(message) {
   if (!message) {

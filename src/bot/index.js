@@ -1,17 +1,17 @@
 const { Telegraf } = require("telegraf");
 const logger = require("../utils/logger.js");
 const LocalSession = require("telegraf-session-local");
-const { assertBotConfig } = require("./config.js");
+const { assertBotConfig } = require("./config");
 
-const { registrationGuard } = require("./middlewares/registration.guard.js");
+const { registrationGuard } = require("./middlewares/registration.guard");
 
-const { registerUserMiddleware } = require("./handlers/user.middleware.js");
+const { registerUserMiddleware } = require("./handlers/user.middleware");
 const {
   registerNavigationHandlers,
-} = require("./handlers/navigation.handlers.js");
-const { registerProfileHandlers } = require("./handlers/profile.handlers.js");
-const { registerFlowHandlers } = require("./handlers/flow.handlers.js");
-const { registerEquipmentHandlers } = require("./handlers/equipment.handlers.js");
+} = require("./handlers/navigation.handlers");
+const { registerProfileHandlers } = require("./handlers/profile.handlers");
+const { registerFlowHandlers } = require("./handlers/flow.handlers");
+const { registerEquipmentHandlers } = require("./handlers/equipment.handlers");
 
 assertBotConfig();
 

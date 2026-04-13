@@ -1,6 +1,6 @@
-const { saveTelegramUser } = require("../../services/user.service.js");
+const { saveTelegramUser } = require("../../services/user.service");
 const logger = require("../../utils/logger.js");
-const { nowIso } = require("../utils.js");
+const { nowIso } = require("../utils");
 
 function registerUserMiddleware(bot) {
   bot.use(async (ctx, next) => {

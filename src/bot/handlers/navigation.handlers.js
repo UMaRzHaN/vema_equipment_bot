@@ -1,17 +1,17 @@
-const { LABELS } = require("../labels.js");
+const { LABELS } = require("../labels");
 const logger = require("../../utils/logger.js");
-const { isAdmin } = require("../config.js");
-const { ensureSession, resetFlow } = require("../utils.js");
-const { listCategories, listEquipmentByCategory } = require("../../services/equipment.service.js");
-const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require("../../services/report.service.js");
-const { getUserByTelegramId, isUserProfileComplete } = require("../../services/user.service.js");
-const { startProfileRegistration, renderProfileCard } = require("./profile.handlers.js");
+const { isAdmin } = require("../config");
+const { ensureSession, resetFlow } = require("../utils");
+const { listCategories, listEquipmentByCategory } = require("../../services/equipment.service");
+const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require("../../services/report.service");
+const { getUserByTelegramId, isUserProfileComplete } = require("../../services/user.service");
+const { startProfileRegistration, renderProfileCard } = require("./profile.handlers");
 const {
   buildCategoryExportKeyboard,
   buildCategoryItemsKeyboard,
   buildCategoryListKeyboard,
   mainMenu,
-} = require("../views/menus.js");
+} = require("../views/menus");
 
 function ensureRegistered(ctx) {
   if (ctx.session?.flow?.type === "register_profile" || ctx.session?.flow?.type === "edit_profile") {

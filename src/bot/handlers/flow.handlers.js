@@ -1,15 +1,15 @@
-const { isAdmin } = require("../config.js");
+const { isAdmin } = require("../config");
 const logger = require("../../utils/logger.js");
-const { EDITABLE_FIELDS, LABELS } = require("../labels.js");
+const { EDITABLE_FIELDS, LABELS } = require("../labels");
 const {
   buildBackKeyboard,
   mainMenu,
-} = require("../views/menus.js");
+} = require("../views/menus");
 const {
   buildEquipmentMarkup,
   renderEquipmentCard,
-} = require("../views/equipment.view.js");
-const { ensureSession, nowIso, resetFlow } = require("../utils.js");
+} = require("../views/equipment.view");
+const { ensureSession, nowIso, resetFlow } = require("../utils");
 const {
   STATUS,
   addEquipment,
@@ -17,13 +17,13 @@ const {
   findEquipmentBySerial,
   startRepair,
   updateEquipment,
-} = require("../../services/equipment.service.js");
+} = require("../../services/equipment.service");
 const {
   rememberEquipmentHint,
   rememberEquipmentHints,
   getEquipmentSuggestionText,
   normalizeOptionalValue,
-} = require("../helpers/equipmentHints.js");
+} = require("../helpers/equipmentHints");
 
 function isVisibleMenuText(ctx, text) {
   const topButtons = [
