@@ -133,53 +133,71 @@ function registerEquipmentHandlers(bot) {
   });
 
   bot.action(/return_(\d+)/, async (ctx) => {
-    const item = findEquipmentById(Number(ctx.match[1]));
-    if (!item) return ctx.answerCbQuery("Не найдено");
-    if (item.status !== STATUS.WITH_USER) return ctx.answerCbQuery("Недоступно");
-    if (item.current_holder_user_id !== ctx.from.id) {
-      return ctx.answerCbQuery("Не твое");
+    try {
+      await ctx.answerCbQuery();
+
+      const item = findEquipmentById(Number(ctx.match[1]));
+      if (!item) return ctx.reply("Оборудование не найдено");
+      if (item.status !== STATUS.WITH_USER) return ctx.reply("Оборудование не выдано.");
+      if (item.current_holder_user_id !== ctx.from.id) {
+        return ctx.reply("Это оборудование выдано другому пользователю.");
+      }
+
+      const updated = returnEquipmentFromUser(item, ctx.from.id, nowIso());
+      const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+
+      return markup
+        ? ctx.editMessageText(renderEquipmentCard(updated), markup)
+        : ctx.editMessageText(renderEquipmentCard(updated));
+    } catch (error) {
+      logger.error("Return equipment error:", { err: error.message });
+      return ctx.reply("Ошибка при возврате оборудования. Попробуйте ещё раз.");
     }
-
-    const updated = returnEquipmentFromUser(item, ctx.from.id, nowIso());
-    const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
-
-    await ctx.answerCbQuery("Возвращено");
-    return markup
-      ? ctx.editMessageText(renderEquipmentCard(updated), markup)
-      : ctx.editMessageText(renderEquipmentCard(updated));
   });
 
   bot.action(/repair_(\d+)/, async (ctx) => {
-    const item = findEquipmentById(Number(ctx.match[1]));
-    if (!item) return ctx.answerCbQuery("Не найдено");
-    if (item.status === STATUS.REPAIR) return ctx.answerCbQuery("Уже в ремонте");
+    try {
+      await ctx.answerCbQuery();
 
-    ensureSession(ctx);
-    ctx.session.flow = {
-      type: "repair",
-      equipmentId: item.id,
-      sourceMessage: rememberMessage(ctx.callbackQuery?.message),
-    };
+      const item = findEquipmentById(Number(ctx.match[1]));
+      if (!item) return ctx.reply("Оборудование не найдено");
+      if (item.status === STATUS.REPAIR) return ctx.reply("Оборудование уже в ремонте.");
 
-    await ctx.answerCbQuery();
-    const promptMessage = await ctx.reply("Введи причину ремонта:");
-    ctx.session.flow.promptMessage = rememberMessage(promptMessage);
+      ensureSession(ctx);
+      ctx.session.flow = {
+        type: "repair",
+        equipmentId: item.id,
+        sourceMessage: rememberMessage(ctx.callbackQuery?.message),
+      };
 
-    return promptMessage;
+      const promptMessage = await ctx.reply("Введи причину ремонта:");
+      ctx.session.flow.promptMessage = rememberMessage(promptMessage);
+
+      return promptMessage;
+    } catch (error) {
+      logger.error("Repair action error:", { err: error.message });
+      return ctx.reply("Ошибка при отправке в ремонт. Попробуйте ещё раз.");
+    }
   });
 
   bot.action(/fromRepair_(\d+)/, async (ctx) => {
-    const item = findEquipmentById(Number(ctx.match[1]));
-    if (!item) return ctx.answerCbQuery("Не найдено");
-    if (item.status !== STATUS.REPAIR) return ctx.answerCbQuery("Не в ремонте");
+    try {
+      await ctx.answerCbQuery();
 
-    const updated = completeRepair(item, ctx.from.id, nowIso());
-    const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+      const item = findEquipmentById(Number(ctx.match[1]));
+      if (!item) return ctx.reply("Оборудование не найдено");
+      if (item.status !== STATUS.REPAIR) return ctx.reply("Оборудование не в ремонте.");
 
-    await ctx.answerCbQuery("Готово");
-    return markup
-      ? ctx.editMessageText(renderEquipmentCard(updated), markup)
-      : ctx.editMessageText(renderEquipmentCard(updated));
+      const updated = completeRepair(item, ctx.from.id, nowIso());
+      const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+
+      return markup
+        ? ctx.editMessageText(renderEquipmentCard(updated), markup)
+        : ctx.editMessageText(renderEquipmentCard(updated));
+    } catch (error) {
+      logger.error("FromRepair action error:", { err: error.message });
+      return ctx.reply("Ошибка при завершении ремонта. Попробуйте ещё раз.");
+    }
   });
 }
 

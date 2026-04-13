@@ -247,8 +247,9 @@ function registerNavigationHandlers(bot) {
         await ctx.deleteMessage(loadingMessage.message_id).catch(() => {});
         return response;
       } catch (error) {
+        logger.error("Image generation error:", { err: error.message });
         await ctx.deleteMessage(loadingMessage.message_id).catch(() => {});
-        throw error;
+        return ctx.reply("Ошибка при создании изображения. Попробуйте позже.");
       }
     }
 

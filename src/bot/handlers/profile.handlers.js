@@ -43,8 +43,12 @@ function normalizePhone(input) {
 function renderProfileCard(ctx) {
   const user = getUserByTelegramId(ctx.from.id);
 
+  if (!user) {
+    return ctx.reply("Профиль не найден. Введите /start для регистрации.");
+  }
+
   return ctx.reply(
-    `👤 Профиль:\n\nИмя: ${user.first_name}\nФамилия: ${user.last_name}\nТелефон: ${user.phone}`,
+    `👤 Профиль:\n\nИмя: ${user.first_name || "—"}\nФамилия: ${user.last_name || "—"}\nТелефон: ${user.phone || "—"}`,
     profileMenuKeyboard()
   );
 }
@@ -124,6 +128,11 @@ function registerProfileHandlers(bot) {
       if (flow.step === 3) {
         const phone = normalizePhone(text);
 
+        if (!flow.data.firstName || !flow.data.lastName) {
+          resetFlow(ctx);
+          return ctx.reply("Сессия устарела. Начните регистрацию заново.");
+        }
+
         await saveUser({
           telegramId: ctx.from.id,
           firstName: flow.data.firstName,
@@ -174,6 +183,11 @@ function registerProfileHandlers(bot) {
     const phone = normalizePhone(ctx.message.contact.phone_number);
 
     if (flow.type === "register_profile") {
+      if (!flow.data.firstName || !flow.data.lastName) {
+        resetFlow(ctx);
+        return ctx.reply("Сессия устарела. Начните регистрацию заново.");
+      }
+
       await saveUser({
         telegramId: ctx.from.id,
         firstName: flow.data.firstName,
