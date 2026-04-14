@@ -1,28 +1,60 @@
-const fs = require("fs");
-const path = require("path");
-const Database = require("better-sqlite3");
-const { schema } = require("./schema");
+'use strict';
 
-const dbPath = process.env.DB_PATH || "./data/inventory.db";
-const dir = path.dirname(dbPath);
+const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
+const { config } = require('../config');
+const logger = require('../utils/logger');
 
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir, { recursive: true });
-}
+const pool = new Pool(config.db);
 
-const db = new Database(dbPath);
-db.pragma("journal_mode = WAL");
-db.exec(schema);
+pool.on('error', (err) => {
+  logger.error('PostgreSQL pool error', { err: err.message });
+});
 
-function ensureColumn(tableName, columnName, definition) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
-  const exists = columns.some((column) => column.name === columnName);
-
-  if (!exists) {
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+async function initDb() {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const client = await pool.connect();
+  try {
+    await client.query(schema);
+    logger.info('Database schema applied');
+  } finally {
+    client.release();
   }
 }
 
-ensureColumn("users", "phone", "TEXT");
+/**
+ * Execute a single query using a pool client.
+ * @param {string} text  SQL text
+ * @param {any[]}  [params]
+ */
+async function query(text, params) {
+  return pool.query(text, params);
+}
 
-module.exports = db;
+/**
+ * Run multiple statements in a single transaction.
+ * @param {(client: import('pg').PoolClient) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function transaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function closeDb() {
+  await pool.end();
+  logger.info('Database pool closed');
+}
+
+module.exports = { pool, query, transaction, initDb, closeDb };

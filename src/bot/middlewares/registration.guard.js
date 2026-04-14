@@ -1,32 +1,26 @@
+'use strict';
+
 const { getUserByTelegramId, isUserProfileComplete } = require('../../services/user.service');
-const { startProfileRegistration } = require('../utils/profile.utils');
 const { resetFlow } = require('../utils');
 
 async function registrationGuard(ctx, next) {
   const userId = ctx.from?.id;
   if (!userId) return next();
 
-  // ❗ ВАЖНО: если уже идет регистрация — пропускаем
-  if (ctx.session?.flow?.type === "register_profile") {
-    return next();
-  }
+  // Already in registration — let it continue
+  if (ctx.session?.flow?.type === 'register_profile') return next();
 
-  const user = getUserByTelegramId(userId);
+  const user = await getUserByTelegramId(userId);
+  if (isUserProfileComplete(user)) return next();
 
-  const isRegistered = isUserProfileComplete(user);
+  // Answer pending callback so button doesn't hang
+  if (ctx.callbackQuery) await ctx.answerCbQuery().catch(() => {});
 
-  if (!isRegistered) {
-    // Ответить на callback_query, чтобы кнопка не зависала
-    if (ctx.callbackQuery) {
-      await ctx.answerCbQuery().catch(() => {});
-    }
-    resetFlow(ctx);
-    return startProfileRegistration(ctx);
-  }
+  resetFlow(ctx);
 
-  return next();
+  // Inline import to avoid circular deps
+  const { startProfileRegistration } = require('../utils/profile.utils');
+  return startProfileRegistration(ctx);
 }
 
-module.exports = {
-  registrationGuard
-};
+module.exports = { registrationGuard };

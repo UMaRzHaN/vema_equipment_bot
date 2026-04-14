@@ -1,98 +1,49 @@
-const db = require("../../db");
-const logger = require("../../utils/logger.js");
+'use strict';
 
-const HINTABLE_FIELDS = new Set([
-  "category",
-  "brand",
-  "model",
-  "inventory_number",
-  "purchase_date",
-]);
+const { getSuggestionsForField } = require('../../repositories/equipment.repo');
+const logger = require('../../utils/logger');
 
-function normalizeHintValue(value) {
-  const normalized = String(value ?? "").trim();
-
-  if (!normalized || normalized === "-" || normalized === "—") {
-    return null;
-  }
-
-  return normalized;
-}
-
-// ❌ больше ничего не запоминаем
-function rememberEquipmentHint() {}
-function rememberEquipmentHints() {}
-
-function getSuggestionsFromDb(field) {
-  if (!HINTABLE_FIELDS.has(field)) {
-    return [];
-  }
-
+async function buildSuggestionsKeyboard(field) {
   try {
-    return db
-      .prepare(
-        `SELECT DISTINCT ${field} 
-         FROM equipment 
-         WHERE ${field} IS NOT NULL AND ${field} != ''
-         ORDER BY updated_at DESC
-         LIMIT 6`
-      )
-      .all()
-      .map((row) => row[field])
-      .filter(Boolean);
-  } catch (e) {
-    logger.error("Hints DB error:", { err: e.message });
-    return [];
-  }
-}
-
-function buildSuggestionsKeyboard(field) {
-  const suggestions = getSuggestionsFromDb(field);
-
-  if (!suggestions.length) {
+    const suggestions = await getSuggestionsForField(field);
+    if (!suggestions.length) return null;
+    return {
+      reply_markup: {
+        keyboard: suggestions.slice(0, 4).map((v) => [v]),
+        resize_keyboard: true,
+        one_time_keyboard: false,
+        selective: true,
+      },
+    };
+  } catch (err) {
+    logger.error('equipmentHints error', { field, err: err.message });
     return null;
   }
-
-  return {
-    reply_markup: {
-      keyboard: suggestions.slice(0, 4).map((value) => [value]),
-      resize_keyboard: true,
-      one_time_keyboard: false,
-      selective: true,
-    },
-  };
 }
 
-function getEquipmentSuggestionText(field, baseText) {
-  const keyboard = buildSuggestionsKeyboard(field);
-
-  if (!keyboard) {
-    return {
-      text: baseText,
-      options: undefined,
-    };
-  }
-
+async function getEquipmentSuggestionText(field, baseText) {
+  const keyboard = await buildSuggestionsKeyboard(field);
+  if (!keyboard) return { text: baseText, options: undefined };
   return {
-    text: `${baseText}\n\nМожно выбрать из подсказок ниже или ввести вручную.`,
+    text:    `${baseText}\n\nМожно выбрать из подсказок ниже или ввести вручную.`,
     options: keyboard,
   };
 }
 
 function normalizeOptionalValue(text) {
-  const value = String(text ?? "").trim();
-
-  if (!value || value === "-" || value === "—") {
-    return null;
-  }
-
+  const value = String(text ?? '').trim();
+  if (!value || value === '-' || value === '—') return null;
   return value;
 }
 
+// Kept for backward-compat — no-ops since hints come from DB directly
+function rememberEquipmentHint() {}
+function rememberEquipmentHints() {}
+
 module.exports = {
-  rememberEquipmentHint,
-  rememberEquipmentHints,
   buildSuggestionsKeyboard,
   getEquipmentSuggestionText,
   normalizeOptionalValue,
+  rememberEquipmentHint,
+  rememberEquipmentHints,
 };

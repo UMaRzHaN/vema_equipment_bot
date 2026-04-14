@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: vema-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - vema-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vema-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-vema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vema} -d ${POSTGRES_DB:-vema_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vema-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: vema-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vema-net
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  vema-net:
+    driver: bridge

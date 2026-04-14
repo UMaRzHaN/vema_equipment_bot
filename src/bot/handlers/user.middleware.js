@@ -1,28 +1,19 @@
-const { saveTelegramUser } = require("../../services/user.service");
-const logger = require("../../utils/logger.js");
-const { nowIso } = require("../utils");
+'use strict';
+
+const { saveTelegramUser } = require('../../services/user.service');
+const logger = require('../../utils/logger');
 
 function registerUserMiddleware(bot) {
   bot.use(async (ctx, next) => {
-    if (!ctx.from) {
-      return next();
-    }
-
-    // Во время регистрации не вмешиваемся в flow
-    if (ctx.session?.flow?.type === "register_profile") {
-      return next();
-    }
-
+    if (!ctx.from) return next();
+    if (ctx.session?.flow?.type === 'register_profile') return next();
     try {
-      await saveTelegramUser(ctx.from, nowIso());
-    } catch (error) {
-      logger.error("User upsert error:", { err: error.message });
+      await saveTelegramUser(ctx.from);
+    } catch (err) {
+      logger.error('User upsert error', { err: err.message, userId: ctx.from.id });
     }
-
     return next();
   });
 }
 
-module.exports = {
-  registerUserMiddleware,
-};
+module.exports = { registerUserMiddleware };

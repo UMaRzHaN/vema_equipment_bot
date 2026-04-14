@@ -1,25 +1,28 @@
-FROM node:20-alpine
+FROM node:20-alpine AS base
 
+# Install fonts for PNG report generation
 RUN apk add --no-cache \
     fontconfig \
-    ttf-dejavu
+    ttf-dejavu \
+    ttf-liberation
 
 WORKDIR /app
 
+# ---- dependencies ----
+FROM base AS deps
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+# ---- release ----
+FROM base AS release
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN mkdir -p /app/data /app/logs
+RUN mkdir -p /app/logs
 
 ENV NODE_ENV=production
-ENV DB_PATH=/app/data/inventory.db
-ENV SESSION_PATH=/app/data/sessions.json
 
-VOLUME ["/app/data"]
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD node -e "require('./src/db'); process.exit(0)" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT||3000) + '/health', r => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "src/app.js"]

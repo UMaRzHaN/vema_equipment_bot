@@ -1,40 +1,36 @@
-const { Markup } = require("telegraf");
-const { STATUS } = require("../../utils/constants");
-const { getEquipmentTimeline, getLastRepairComment } = require("../../services/history.service");
-const { formatUser, getUserByTelegramId } = require("../../services/user.service");
-const { formatDate, statusLabel } = require("./formatters");
+'use strict';
+
+const { Markup } = require('telegraf');
+const { STATUS } = require('../../utils/constants');
+const { getEquipmentTimeline, getLastRepairComment } = require('../../services/history.service');
+const { formatUser, getUserByTelegramId } = require('../../services/user.service');
+const { formatDate, statusLabel } = require('../../utils/formatters');
 
 function buildEquipmentButtons(item, canManage = false) {
   const rows = [];
 
   if (item.status === STATUS.IN_STOCK) {
     rows.push([
-      Markup.button.callback("📤 Выдать", `give_${item.id}`),
-      Markup.button.callback("🔧 В ремонт", `repair_${item.id}`),
+      Markup.button.callback('📤 Выдать', `give_${item.id}`),
+      Markup.button.callback('🔧 В ремонт', `repair_${item.id}`),
     ]);
   }
-
   if (item.status === STATUS.WITH_USER) {
-    rows.push([Markup.button.callback("↩️ Вернуть", `return_${item.id}`)]);
+    rows.push([Markup.button.callback('↩️ Вернуть', `return_${item.id}`)]);
   }
-
   if (item.status === STATUS.REPAIR) {
-    rows.push([Markup.button.callback("♻️ Из ремонта", `fromRepair_${item.id}`)]);
+    rows.push([Markup.button.callback('♻️ Из ремонта', `fromRepair_${item.id}`)]);
   }
-
-  // Кнопка истории — для всех, кроме списанных
   if (item.status !== STATUS.WRITTEN_OFF) {
-    rows.push([Markup.button.callback("📋 История", `history_${item.id}`)]);
+    rows.push([Markup.button.callback('📋 История', `history_${item.id}`)]);
   }
-
   if (canManage) {
     const adminRow = [
-      Markup.button.callback("✏️ Редактировать", `edit_${item.id}`),
-      Markup.button.callback("🗑️ Удалить", `delete_${item.id}`),
+      Markup.button.callback('✏️ Редактировать', `edit_${item.id}`),
+      Markup.button.callback('🗑️ Удалить', `delete_${item.id}`),
     ];
-    // #6: Списание — только если ещё не списано
     if (item.status !== STATUS.WRITTEN_OFF) {
-      adminRow.push(Markup.button.callback("📴 Списать", `writeoff_${item.id}`));
+      adminRow.push(Markup.button.callback('📴 Списать', `writeoff_${item.id}`));
     }
     rows.push(adminRow);
   }
@@ -47,17 +43,16 @@ function buildEquipmentMarkup(item, canManage = false) {
   return rows.length ? Markup.inlineKeyboard(rows) : null;
 }
 
-function renderEquipmentCard(item) {
-  const user = item.current_holder_user_id
-    ? formatUser(getUserByTelegramId(item.current_holder_user_id))
-    : "-";
-  const timeline = getEquipmentTimeline(item.id);
-  const repairComment = getLastRepairComment(item.id);
-  const commentLine = repairComment
-    ? `Комментарий к ремонту: ${repairComment}\n`
-    : "";
+async function renderEquipmentCard(item) {
+  const holderUser = item.current_holder_user_id
+    ? await getUserByTelegramId(item.current_holder_user_id)
+    : null;
+  const user     = formatUser(holderUser);
+  const timeline = await getEquipmentTimeline(item.id);
+  const repairComment = await getLastRepairComment(item.id);
+  const commentLine   = repairComment ? `Комментарий к ремонту: ${repairComment}\n` : '';
 
-  return `#${item.inventory_number || "-"} ${item.category || "-"} ${item.model || "-"} - ${item.serial_number || "-"}
+  return `#${item.inventory_number || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
 
 Статус: ${statusLabel(item.status)}
 Пользователь: ${user}
@@ -68,7 +63,4 @@ function renderEquipmentCard(item) {
 ${commentLine}`;
 }
 
-module.exports = {
-  buildEquipmentMarkup,
-  renderEquipmentCard,
-};
+module.exports = { buildEquipmentMarkup, renderEquipmentCard };

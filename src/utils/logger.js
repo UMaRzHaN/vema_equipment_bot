@@ -1,27 +1,25 @@
-const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
-const currentLevel = LEVELS[process.env.LOG_LEVEL] ?? LEVELS.info;
+'use strict';
 
-function log(level, message, meta = {}) {
-  if (LEVELS[level] > currentLevel) return;
+const pino = require('pino');
+const { config } = require('../config');
 
-  const entry = {
-    ts: new Date().toISOString(),
-    level,
-    msg: message,
-    ...meta,
-  };
+const transport =
+  config.nodeEnv === 'development'
+    ? pino.transport({ target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard' } })
+    : undefined;
 
-  const out = JSON.stringify(entry);
-  if (level === "error" || level === "warn") {
-    process.stderr.write(out + "\n");
-  } else {
-    process.stdout.write(out + "\n");
-  }
-}
+const logger = pino(
+  {
+    level: config.log.level,
+    base: { pid: process.pid },
+    timestamp: pino.stdTimeFunctions.isoTime,
+    formatters: {
+      level(label) {
+        return { level: label };
+      },
+    },
+  },
+  transport,
+);
 
-module.exports = {
-  info:  (msg, meta) => log("info",  msg, meta),
-  warn:  (msg, meta) => log("warn",  msg, meta),
-  error: (msg, meta) => log("error", msg, meta),
-  debug: (msg, meta) => log("debug", msg, meta),
-};
+module.exports = logger;

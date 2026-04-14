@@ -1,59 +1,59 @@
-const { Telegraf } = require("telegraf");
-const logger = require("../utils/logger.js");
-const LocalSession = require("telegraf-session-local");
-const { assertBotConfig } = require("./config");
+'use strict';
 
-const { registrationGuard } = require("./middlewares/registration.guard");
-const { createRateLimiter } = require("./middlewares/rate.limiter");
+const { Telegraf } = require('telegraf');
+const { config } = require('../config');
+const logger = require('../utils/logger');
+const { botUpdatesTotal, botErrorsTotal } = require('../utils/metrics');
 
-const { registerUserMiddleware } = require("./handlers/user.middleware");
-const {
-  registerNavigationHandlers,
-} = require("./handlers/navigation.handlers");
-const { registerProfileHandlers } = require("./handlers/profile.handlers");
-const { registerFlowHandlers } = require("./handlers/flow.handlers");
-const { registerEquipmentHandlers } = require("./handlers/equipment.handlers");
+const { sessionMiddleware }       = require('./middlewares/session.middleware');
+const { registrationGuard }       = require('./middlewares/registration.guard');
+const { createRateLimiter }       = require('./middlewares/rate.limiter');
 
-assertBotConfig();
+const { registerUserMiddleware }      = require('./handlers/user.middleware');
+const { registerNavigationHandlers }  = require('./handlers/navigation.handlers');
+const { registerProfileHandlers }     = require('./handlers/profile.handlers');
+const { registerFlowHandlers }        = require('./handlers/flow.handlers');
+const { registerEquipmentHandlers }   = require('./handlers/equipment.handlers');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+function createBot() {
+  const bot = new Telegraf(config.bot.token);
 
-// Persistent file-based session (survives restarts)
-const localSession = new LocalSession({
-  database: process.env.SESSION_PATH || "./data/sessions.json",
-  property: "session",
-  storage: LocalSession.storageFileAsync,
-  format: { serialize: JSON.stringify, deserialize: JSON.parse },
-});
-bot.use(localSession.middleware());
+  // ── Middleware chain ──────────────────────────────────────────────────────
+  bot.use(sessionMiddleware());
+  bot.use(registrationGuard);
+  bot.use(createRateLimiter({ windowMs: 60_000, maxCalls: 30, label: 'global' }));
 
-bot.use(registrationGuard);
-
-// Rate limit: не более 30 любых действий в минуту на пользователя
-bot.use(createRateLimiter({ windowMs: 60_000, maxCalls: 30, label: "global" }));
-
-registerUserMiddleware(bot);
-registerNavigationHandlers(bot);
-registerProfileHandlers(bot);
-registerFlowHandlers(bot);
-registerEquipmentHandlers(bot);
-
-bot.catch(async (error, ctx) => {
-  logger.error(`Bot error for ${ctx.updateType}:`, {
-    err: error.message,
-    userId: ctx.from?.id,
-    update: ctx.updateType,
+  // ── Count updates for metrics ─────────────────────────────────────────────
+  bot.use(async (ctx, next) => {
+    botUpdatesTotal.inc({ type: ctx.updateType || 'unknown' });
+    return next();
   });
 
-  try {
-    if (ctx.callbackQuery) {
-      await ctx.answerCbQuery("Произошла ошибка. Попробуйте ещё раз.", { show_alert: true }).catch(() => {});
-    } else {
-      await ctx.reply("⚠️ Произошла ошибка. Попробуйте ещё раз или нажмите /start.").catch(() => {});
-    }
-  } catch (_) {
-    // ignore secondary errors
-  }
-});
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  registerUserMiddleware(bot);
+  registerNavigationHandlers(bot);
+  registerProfileHandlers(bot);
+  registerFlowHandlers(bot);
+  registerEquipmentHandlers(bot);
 
-module.exports = { bot };
+  // ── Global error handler ──────────────────────────────────────────────────
+  bot.catch(async (err, ctx) => {
+    botErrorsTotal.inc();
+    logger.error('Bot error', {
+      err: err.message,
+      updateType: ctx.updateType,
+      userId: ctx.from?.id,
+    });
+    try {
+      if (ctx.callbackQuery) {
+        await ctx.answerCbQuery('Произошла ошибка. Попробуйте ещё раз.', { show_alert: true }).catch(() => {});
+      } else {
+        await ctx.reply('⚠️ Произошла ошибка. Попробуйте ещё раз или нажмите /start.').catch(() => {});
+      }
+    } catch (_) { /* ignore secondary errors */ }
+  });
+
+  return bot;
+}
+
+module.exports = { createBot };

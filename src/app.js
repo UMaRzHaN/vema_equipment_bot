@@ -1,42 +1,64 @@
+'use strict';
+
 require('dotenv').config();
-const logger = require("./utils/logger.js");
 
-const { bot } = require('./bot');
-const db = require('./db');
-const { startNotificationScheduler } = require("./services/notification.service");
+const { assertConfig, config } = require('./config');
+assertConfig();
 
-// Читаем ADMIN_IDS для уведомлений
-const ADMIN_IDS = process.env.ADMIN_IDS
-  ? process.env.ADMIN_IDS.split(",").map((id) => Number(id.trim())).filter(Boolean)
-  : [];
+const logger = require('./utils/logger');
+const { initDb, closeDb } = require('./db');
+const { connectRedis, closeRedis } = require('./redis');
+const { createBot } = require('./bot');
+const { createApi } = require('./api');
+const { startNotificationWorker } = require('./workers/notification.worker');
+const { scheduleOverdueCheck } = require('./services/notification.service');
 
-async function startBot() {
-  try {
-    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    await bot.launch({ dropPendingUpdates: true });
-    logger.info('Bot started');
+async function main() {
+  // ── 1. Databases ──────────────────────────────────────────────────────────
+  await connectRedis();
+  await initDb();
 
-    // #2 — запускаем планировщик уведомлений
-    startNotificationScheduler(bot, ADMIN_IDS);
-  } catch (err) {
-    logger.error('Bot launch error:', { err: err.message });
-    process.exit(1);
-  }
+  // ── 2. Telegram bot ───────────────────────────────────────────────────────
+  const bot = createBot();
+
+  // ── 3. BullMQ notification worker ────────────────────────────────────────
+  startNotificationWorker(bot);
+
+  // ── 4. Fastify API + webhook route ────────────────────────────────────────
+  const api = createApi(bot, config.bot.webhookSecret);
+  await api.listen({ port: config.port, host: '0.0.0.0' });
+  logger.info(`API listening on port ${config.port}`);
+
+  // ── 5. Register Telegram webhook ─────────────────────────────────────────
+  const webhookUrl = `${config.bot.webhookUrl}/webhook`;
+  await bot.telegram.setWebhook(webhookUrl, {
+    secret_token: config.bot.webhookSecret,
+    drop_pending_updates: true,
+  });
+  logger.info(`Webhook set → ${webhookUrl}`);
+
+  // ── 6. Overdue notification scheduler ────────────────────────────────────
+  scheduleOverdueCheck(config.bot.adminIds, config.overdueDays);
+
+  logger.info('Bot started in webhook mode');
 }
 
-function shutdown(signal) {
-  logger.info(`Received ${signal}, shutting down...`);
-  bot.stop(signal);
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+async function shutdown(signal) {
+  logger.info(`Received ${signal}, shutting down…`);
   try {
-    db.close();
-    logger.info('Database closed.');
+    await closeDb();
+    await closeRedis();
   } catch (err) {
-    logger.error('Error closing database:', { err: err.message });
+    logger.error('Shutdown error', { err: err.message });
   }
   process.exit(0);
 }
 
-startBot();
-
-process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGINT',  () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
+
+main().catch((err) => {
+  logger.error('Startup error', { err: err.message, stack: err.stack });
+  process.exit(1);
+});

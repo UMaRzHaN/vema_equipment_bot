@@ -1,3 +1,5 @@
+'use strict';
+
 function ensureSession(ctx) {
   ctx.session ??= {};
 }
@@ -11,8 +13,4 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-module.exports = {
-  ensureSession,
-  nowIso,
-  resetFlow,
-};
+module.exports = { ensureSession, nowIso, resetFlow };

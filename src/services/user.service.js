@@ -1,38 +1,27 @@
-const {
-  findUserByTelegramId,
-  upsertTelegramUser,
-  updateUserProfile,
-} = require("../repositories/user.repo");
+'use strict';
 
-function saveTelegramUser(from, createdAt) {
-  return upsertTelegramUser(from, createdAt);
+const { findUserByTelegramId, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
+
+async function saveTelegramUser(from) {
+  return upsertTelegramUser(from);
 }
 
-function saveUser({ telegramId, firstName, lastName, phone }) {
-  const existing = findUserByTelegramId(telegramId);
+async function saveUser({ telegramId, firstName, lastName, phone }) {
+  const existing = await findUserByTelegramId(telegramId);
 
-  // Если записи ещё нет, создаём её
   if (!existing) {
-    upsertTelegramUser(
-      {
-        id: telegramId,
-        username: null,
-        first_name: firstName || null,
-        last_name: lastName || null,
-      },
-      new Date().toISOString(),
-    );
+    await upsertTelegramUser({ id: telegramId, username: null, first_name: firstName || null, last_name: lastName || null });
   }
 
   const data = {};
   if (firstName !== undefined) data.first_name = firstName;
-  if (lastName !== undefined) data.last_name = lastName;
-  if (phone !== undefined) data.phone = phone;
+  if (lastName  !== undefined) data.last_name  = lastName;
+  if (phone     !== undefined) data.phone       = phone;
 
-  return updateUserProfile(telegramId, data);
+  await updateUserProfile(telegramId, data);
 }
 
-function getUserByTelegramId(telegramId) {
+async function getUserByTelegramId(telegramId) {
   return findUserByTelegramId(telegramId);
 }
 
@@ -41,17 +30,11 @@ function isUserProfileComplete(user) {
 }
 
 function formatUser(user) {
-  if (!user) return "—";
+  if (!user) return '—';
   const parts = [user.first_name, user.last_name].filter(Boolean);
-  if (parts.length) return parts.join(" ");
+  if (parts.length) return parts.join(' ');
   if (user.username) return `@${user.username}`;
   return String(user.telegram_user_id);
 }
 
-module.exports = {
-  formatUser,
-  saveTelegramUser,
-  saveUser,
-  getUserByTelegramId,
-  isUserProfileComplete,
-};
+module.exports = { formatUser, getUserByTelegramId, isUserProfileComplete, saveTelegramUser, saveUser };

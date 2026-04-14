@@ -1,29 +1,26 @@
+'use strict';
+
 const {
-  addHistory,
   getEquipmentHistory,
   getLastActionDate,
   getLastRepairComment,
   getOverdueEquipment,
-  getRecentHistory,
-} = require("../repositories/history.repo");
+} = require('../repositories/history.repo');
 
-function recordHistory(entry) {
-  return addHistory(entry);
+async function getEquipmentTimeline(equipmentId) {
+  const [lastIssueDate, lastReturnDate, lastRepairDate] = await Promise.all([
+    getLastActionDate(equipmentId, ['выдано']),
+    getLastActionDate(equipmentId, ['возвращено']),
+    getLastActionDate(equipmentId, ['из ремонта']),
+  ]);
+  return { lastIssueDate, lastReturnDate, lastRepairDate };
 }
 
-function getEquipmentTimeline(equipmentId) {
-  return {
-    lastIssueDate: getLastActionDate(equipmentId, ["выдано"]),
-    lastReturnDate: getLastActionDate(equipmentId, ["возвращено"]),
-    lastRepairDate: getLastActionDate(equipmentId, ["из ремонта"]),
-  };
-}
-
-function getFullEquipmentHistory(equipmentId, limit = 10) {
+async function getFullEquipmentHistory(equipmentId, limit = 10) {
   return getEquipmentHistory(equipmentId, limit);
 }
 
-function findOverdueEquipment(thresholdDays = 7) {
+async function findOverdueEquipment(thresholdDays = 7) {
   return getOverdueEquipment(thresholdDays);
 }
 
@@ -32,6 +29,4 @@ module.exports = {
   getEquipmentTimeline,
   getFullEquipmentHistory,
   getLastRepairComment,
-  getRecentHistory,
-  recordHistory,
 };
