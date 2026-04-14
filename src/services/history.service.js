@@ -1,7 +1,9 @@
 const {
   addHistory,
+  getEquipmentHistory,
   getLastActionDate,
   getLastRepairComment,
+  getOverdueEquipment,
   getRecentHistory,
 } = require("../repositories/history.repo");
 
@@ -17,8 +19,18 @@ function getEquipmentTimeline(equipmentId) {
   };
 }
 
+function getFullEquipmentHistory(equipmentId, limit = 10) {
+  return getEquipmentHistory(equipmentId, limit);
+}
+
+function findOverdueEquipment(thresholdDays = 7) {
+  return getOverdueEquipment(thresholdDays);
+}
+
 module.exports = {
+  findOverdueEquipment,
   getEquipmentTimeline,
+  getFullEquipmentHistory,
   getLastRepairComment,
   getRecentHistory,
   recordHistory,

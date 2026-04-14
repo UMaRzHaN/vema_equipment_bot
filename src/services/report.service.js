@@ -301,8 +301,6 @@ async function buildCategoryXlsx(categoryName, items) {
 }
 
 module.exports = {
-  buildCategoryCsv,
-  buildCategoryTable,
   buildCategoryXlsx,
   buildSummaryText,
   createCategoryImage,

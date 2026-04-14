@@ -22,11 +22,21 @@ function buildEquipmentButtons(item, canManage = false) {
     rows.push([Markup.button.callback("♻️ Из ремонта", `fromRepair_${item.id}`)]);
   }
 
+  // Кнопка истории — для всех, кроме списанных
+  if (item.status !== STATUS.WRITTEN_OFF) {
+    rows.push([Markup.button.callback("📋 История", `history_${item.id}`)]);
+  }
+
   if (canManage) {
-    rows.push([
+    const adminRow = [
       Markup.button.callback("✏️ Редактировать", `edit_${item.id}`),
       Markup.button.callback("🗑️ Удалить", `delete_${item.id}`),
-    ]);
+    ];
+    // #6: Списание — только если ещё не списано
+    if (item.status !== STATUS.WRITTEN_OFF) {
+      adminRow.push(Markup.button.callback("📴 Списать", `writeoff_${item.id}`));
+    }
+    rows.push(adminRow);
   }
 
   return rows;
@@ -47,7 +57,7 @@ function renderEquipmentCard(item) {
     ? `Комментарий к ремонту: ${repairComment}\n`
     : "";
 
-  return `${item.category || "-"} ${item.model || "-"} - ${item.serial_number || "-"}
+  return `#${item.inventory_number || "-"} ${item.category || "-"} ${item.model || "-"} - ${item.serial_number || "-"}
 
 Статус: ${statusLabel(item.status)}
 Пользователь: ${user}

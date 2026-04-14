@@ -8,6 +8,16 @@ function assertBotConfig() {
   if (!process.env.BOT_TOKEN) {
     throw new Error("BOT_TOKEN is missing");
   }
+  if (ADMIN_IDS.length === 0) {
+    // Не падаем, но предупреждаем — без админов нельзя добавлять/удалять оборудование
+    process.stderr.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "warn",
+        msg: "ADMIN_IDS not configured — admin functions (add/edit/delete) will be unavailable",
+      }) + "\n",
+    );
+  }
 }
 
 function isAdmin(ctx) {

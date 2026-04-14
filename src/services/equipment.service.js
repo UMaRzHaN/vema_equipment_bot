@@ -32,6 +32,7 @@ function getEquipmentStats(items = listAllEquipment()) {
     inStock: 0,
     withUser: 0,
     repair: 0,
+    writtenOff: 0,
     byCategory: new Map(),
   };
 
@@ -39,6 +40,7 @@ function getEquipmentStats(items = listAllEquipment()) {
     if (item.status === STATUS.IN_STOCK) stats.inStock += 1;
     else if (item.status === STATUS.WITH_USER) stats.withUser += 1;
     else if (item.status === STATUS.REPAIR) stats.repair += 1;
+    else if (item.status === STATUS.WRITTEN_OFF) stats.writtenOff += 1;
 
     const categoryName = item.category || "Без категории";
     const categoryStats = stats.byCategory.get(categoryName) || {
@@ -46,12 +48,14 @@ function getEquipmentStats(items = listAllEquipment()) {
       inStock: 0,
       withUser: 0,
       repair: 0,
+      writtenOff: 0,
     };
 
     categoryStats.total += 1;
     if (item.status === STATUS.IN_STOCK) categoryStats.inStock += 1;
     else if (item.status === STATUS.WITH_USER) categoryStats.withUser += 1;
     else if (item.status === STATUS.REPAIR) categoryStats.repair += 1;
+    else if (item.status === STATUS.WRITTEN_OFF) categoryStats.writtenOff += 1;
 
     stats.byCategory.set(categoryName, categoryStats);
   }
@@ -60,7 +64,14 @@ function getEquipmentStats(items = listAllEquipment()) {
 }
 
 function addEquipment(data) {
-  return createEquipment(data);
+  try {
+    return createEquipment(data);
+  } catch (err) {
+    if (err.message && err.message.includes("UNIQUE")) {
+      throw new Error("DUPLICATE_SERIAL");
+    }
+    throw err;
+  }
 }
 
 function updateEquipment(id, data) {
@@ -160,6 +171,31 @@ function completeRepair(equipment, performedByUserId, now) {
   return findEquipmentById(equipment.id);
 }
 
+// #6 — Списание
+function writeOffEquipment(equipment, performedByUserId, comment, now) {
+  updateEquipmentStatus({
+    id: equipment.id,
+    status: STATUS.WRITTEN_OFF,
+    current_holder_user_id: null,
+    current_issue_date: null,
+    updated_at: now,
+  });
+
+  recordHistory({
+    equipment_id: equipment.id,
+    action: "списано",
+    from_status: equipment.status,
+    to_status: STATUS.WRITTEN_OFF,
+    from_user_id: equipment.current_holder_user_id,
+    to_user_id: null,
+    performed_by_user_id: performedByUserId,
+    comment: comment || null,
+    action_date: now,
+  });
+
+  return findEquipmentById(equipment.id);
+}
+
 module.exports = {
   STATUS,
   addEquipment,
@@ -175,4 +211,5 @@ module.exports = {
   returnEquipmentFromUser,
   startRepair,
   updateEquipment,
+  writeOffEquipment,
 };

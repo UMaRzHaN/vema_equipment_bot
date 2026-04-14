@@ -5,7 +5,7 @@ const { ensureSession, resetFlow } = require("../utils");
 const { listCategories, listEquipmentByCategory } = require("../../services/equipment.service");
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require("../../services/report.service");
 const { getUserByTelegramId, isUserProfileComplete } = require("../../services/user.service");
-const { startProfileRegistration, renderProfileCard } = require("./profile.handlers");
+const { startProfileRegistration, renderProfileCard } = require("../utils/profile.utils");
 const {
   buildCategoryExportKeyboard,
   buildCategoryItemsKeyboard,
@@ -200,6 +200,37 @@ function registerNavigationHandlers(bot) {
     }
   });
 
+  // #7 — пагинация внутри категории
+  bot.action(/itemsPage_(.+)_(\d+)/, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+
+      let categoryName;
+      try {
+        categoryName = decodeURIComponent(ctx.match[1]);
+      } catch {
+        categoryName = ctx.match[1];
+      }
+      const page = Number(ctx.match[2]) || 0;
+
+      const items = listEquipmentByCategory(categoryName);
+      if (!items.length) {
+        return ctx.editMessageText(`Нет оборудования в категории ${categoryName}`);
+      }
+
+      return ctx.editMessageText(
+        `📦 ${categoryName}`,
+        buildCategoryItemsKeyboard(items, page),
+      );
+    } catch (error) {
+      logger.error("ItemsPage action error:", { err: error.message });
+      return ctx.reply("Ошибка при переключении страницы");
+    }
+  });
+
+  // noop — заглушка для кнопки "X/Y" (текущая страница)
+  bot.action("noop", (ctx) => ctx.answerCbQuery());
+
   bot.hears(/.*/, async (ctx, next) => {
     if (!ensureRegistered(ctx)) return;
 
@@ -253,7 +284,7 @@ function registerNavigationHandlers(bot) {
       }
     }
 
-    return ctx.reply(`📦 ${text}`, buildCategoryItemsKeyboard(items));
+    return ctx.reply(`📦 ${text}`, buildCategoryItemsKeyboard(items, 0));
   });
 }
 

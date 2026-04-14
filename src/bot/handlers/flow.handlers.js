@@ -1,10 +1,7 @@
 const { isAdmin } = require("../config");
 const logger = require("../../utils/logger.js");
 const { EDITABLE_FIELDS, LABELS } = require("../labels");
-const {
-  buildBackKeyboard,
-  mainMenu,
-} = require("../views/menus");
+const { buildBackKeyboard, mainMenu } = require("../views/menus");
 const {
   buildEquipmentMarkup,
   renderEquipmentCard,
@@ -17,6 +14,7 @@ const {
   findEquipmentBySerial,
   startRepair,
   updateEquipment,
+  writeOffEquipment,
 } = require("../../services/equipment.service");
 const {
   rememberEquipmentHint,
@@ -81,13 +79,8 @@ function sendAddEquipmentPrompt(ctx, step) {
     }
     case 4:
       return ctx.reply("Введите серийный номер:");
-    case 5: {
-      const prompt = getEquipmentSuggestionText(
-        "inventory_number",
-        "Введите инвентарный номер (или оставьте пустым):",
-      );
-      return ctx.reply(prompt.text, prompt.options);
-    }
+    case 5:
+      return ctx.reply("Введите инвентарный номер (или оставьте пустым):");
     case 6: {
       const prompt = getEquipmentSuggestionText(
         "purchase_date",
@@ -120,7 +113,9 @@ function registerFlowHandlers(bot) {
 
     // Global length guard — reject oversized input in any flow
     if (text.length > MAX_INPUT_LENGTH) {
-      return ctx.reply(`Слишком длинный текст. Максимум ${MAX_INPUT_LENGTH} символов.`);
+      return ctx.reply(
+        `Слишком длинный текст. Максимум ${MAX_INPUT_LENGTH} символов.`,
+      );
     }
 
     ensureSession(ctx);
@@ -156,6 +151,44 @@ function registerFlowHandlers(bot) {
       resetFlow(ctx);
       await ctx.reply(
         `Отправлено в ремонт:\n${equipment.category} ${equipment.model} - ${equipment.serial_number || equipment.inventory_number}\nПричина: ${text}`,
+      );
+
+      return ctx.reply(renderEquipmentCard(updated), markup || undefined);
+    }
+
+    if (flow?.type === "writeoff") {
+      const equipment = findEquipmentById(flow.equipmentId);
+
+      if (!equipment) {
+        resetFlow(ctx);
+        return ctx.reply("Оборудование не найдено.");
+      }
+
+      // "—" означает пустой комментарий
+      const comment = text === "—" ? null : text;
+
+      const updated = writeOffEquipment(
+        equipment,
+        ctx.from.id,
+        comment,
+        nowIso(),
+      );
+      const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+
+      await safeDeleteMessage(
+        ctx,
+        flow.sourceMessage,
+        "Writeoff source card delete error",
+      );
+      await safeDeleteMessage(
+        ctx,
+        flow.promptMessage,
+        "Writeoff prompt delete error",
+      );
+
+      resetFlow(ctx);
+      await ctx.reply(
+        `Оборудование списано:\n${equipment.category} ${equipment.model} - ${equipment.serial_number || equipment.inventory_number}`,
       );
 
       return ctx.reply(renderEquipmentCard(updated), markup || undefined);
@@ -198,7 +231,9 @@ function registerFlowHandlers(bot) {
         case 6: {
           const dateVal = normalizeOptionalValue(text);
           if (dateVal && !isValidDate(dateVal)) {
-            return ctx.reply("Неверный формат даты. Введите дату в формате YYYY-MM-DD или оставьте пустым:");
+            return ctx.reply(
+              "Неверный формат даты. Введите дату в формате YYYY-MM-DD или оставьте пустым:",
+            );
           }
           data.purchase_date = dateVal;
           rememberEquipmentHint("purchase_date", data.purchase_date);
@@ -221,6 +256,11 @@ function registerFlowHandlers(bot) {
           } catch (error) {
             logger.error("Create equipment error:", { err: error.message });
             resetFlow(ctx);
+            if (error.message === "DUPLICATE_SERIAL") {
+              return ctx.reply(
+                "Оборудование с таким серийным номером уже существует. Начните добавление заново.",
+              );
+            }
             return ctx.reply(
               "Не удалось добавить оборудование. Попробуйте ещё раз.",
             );
@@ -264,11 +304,13 @@ function registerFlowHandlers(bot) {
         buildBackKeyboard(),
       );
 
+      // Явно сохраняем все нужные поля, не полагаясь на spread из изменившегося flow
       ctx.session.flow = {
-        ...flow,
         type: "edit_equipment",
         step: 2,
         equipmentId: flow.equipmentId,
+        sourceMessage: flow.sourceMessage,
+        selectorMessage: flow.selectorMessage,
         data: { field, fieldLabel: text },
         promptMessage: rememberMessage(promptMessage),
       };
@@ -303,7 +345,9 @@ function registerFlowHandlers(bot) {
 
     if (field === "purchase_date" && text) {
       if (!isValidDate(text)) {
-        return ctx.reply("Неверный формат даты. Введите дату в формате YYYY-MM-DD или оставьте пустым:");
+        return ctx.reply(
+          "Неверный формат даты. Введите дату в формате YYYY-MM-DD или оставьте пустым:",
+        );
       }
     }
 

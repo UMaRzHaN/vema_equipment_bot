@@ -1,5 +1,5 @@
 const { getUserByTelegramId, isUserProfileComplete } = require('../../services/user.service');
-const { startProfileRegistration } = require('../handlers/profile.handlers');
+const { startProfileRegistration } = require('../utils/profile.utils');
 const { resetFlow } = require('../utils');
 
 async function registrationGuard(ctx, next) {
@@ -16,6 +16,10 @@ async function registrationGuard(ctx, next) {
   const isRegistered = isUserProfileComplete(user);
 
   if (!isRegistered) {
+    // Ответить на callback_query, чтобы кнопка не зависала
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery().catch(() => {});
+    }
     resetFlow(ctx);
     return startProfileRegistration(ctx);
   }

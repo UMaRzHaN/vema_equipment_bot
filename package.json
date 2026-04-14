@@ -2,7 +2,7 @@
   "name": "vema-equipment-bot",
   "version": "1.0.0",
   "description": "Telegram bot for equipment inventory management (VEMA)",
-  "main": "index.js",
+  "main": "src/app.js",
   "scripts": {
     "test": "node scripts/smoke-test.js",
     "test:smoke": "node scripts/smoke-test.js",

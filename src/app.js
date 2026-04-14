@@ -3,12 +3,21 @@ const logger = require("./utils/logger.js");
 
 const { bot } = require('./bot');
 const db = require('./db');
+const { startNotificationScheduler } = require("./services/notification.service");
+
+// Читаем ADMIN_IDS для уведомлений
+const ADMIN_IDS = process.env.ADMIN_IDS
+  ? process.env.ADMIN_IDS.split(",").map((id) => Number(id.trim())).filter(Boolean)
+  : [];
 
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch({ dropPendingUpdates: true });
     logger.info('Bot started');
+
+    // #2 — запускаем планировщик уведомлений
+    startNotificationScheduler(bot, ADMIN_IDS);
   } catch (err) {
     logger.error('Bot launch error:', { err: err.message });
     process.exit(1);

@@ -86,9 +86,62 @@ function getLastRepairComment(equipmentId) {
   return row?.comment || null;
 }
 
+// Полная история по конкретному оборудованию (для карточки)
+function getEquipmentHistory(equipmentId, limit = 10) {
+  return db
+    .prepare(
+      `
+        SELECT
+          h.action,
+          h.from_status,
+          h.to_status,
+          h.comment,
+          h.action_date,
+          u.first_name,
+          u.last_name,
+          u.username
+        FROM history h
+        LEFT JOIN users u ON u.telegram_user_id = h.performed_by_user_id
+        WHERE h.equipment_id = ?
+        ORDER BY datetime(h.action_date) DESC
+        LIMIT ?
+      `,
+    )
+    .all(equipmentId, limit);
+}
+
+// Оборудование у пользователей дольше N дней — для уведомлений
+function getOverdueEquipment(thresholdDays) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - thresholdDays);
+  const cutoffIso = cutoff.toISOString();
+
+  return db
+    .prepare(
+      `
+        SELECT
+          e.id,
+          e.category,
+          e.brand,
+          e.model,
+          e.serial_number,
+          e.inventory_number,
+          e.current_holder_user_id,
+          e.current_issue_date
+        FROM equipment e
+        WHERE e.status = 'у пользователя'
+          AND e.current_issue_date IS NOT NULL
+          AND e.current_issue_date < ?
+      `,
+    )
+    .all(cutoffIso);
+}
+
 module.exports = {
   addHistory,
+  getEquipmentHistory,
   getLastActionDate,
   getLastRepairComment,
+  getOverdueEquipment,
   getRecentHistory,
 };
