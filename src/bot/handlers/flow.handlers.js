@@ -60,38 +60,56 @@ function rememberMessage(message) {
   };
 }
 
+const TOTAL_ADD_STEPS = 7;
+
+function stepLabel(step) {
+  return `[${step}/${TOTAL_ADD_STEPS}]`;
+}
+
+function mergeWithBackKeyboard(options) {
+  const backRow = [{ text: LABELS.back }];
+  const base = options?.reply_markup?.keyboard || [];
+  return {
+    reply_markup: {
+      keyboard: [...base, backRow],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+    },
+  };
+}
+
 function sendAddEquipmentPrompt(ctx, step) {
   switch (step) {
     case 1: {
       const prompt = getEquipmentSuggestionText(
         "category",
-        "Введите категорию:",
+        `${stepLabel(step)} Введите категорию:`,
       );
-      return ctx.reply(prompt.text, prompt.options);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case 2: {
-      const prompt = getEquipmentSuggestionText("brand", "Введите бренд:");
-      return ctx.reply(prompt.text, prompt.options);
+      const prompt = getEquipmentSuggestionText("brand", `${stepLabel(step)} Введите бренд:`);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case 3: {
-      const prompt = getEquipmentSuggestionText("model", "Введите модель:");
-      return ctx.reply(prompt.text, prompt.options);
+      const prompt = getEquipmentSuggestionText("model", `${stepLabel(step)} Введите модель:`);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case 4:
-      return ctx.reply("Введите серийный номер:");
+      return ctx.reply(`${stepLabel(step)} Введите серийный номер:`, buildBackKeyboard());
     case 5:
-      return ctx.reply("Введите инвентарный номер (или оставьте пустым):");
+      return ctx.reply(`${stepLabel(step)} Введите инвентарный номер (или оставьте пустым):`, buildBackKeyboard());
     case 6: {
       const prompt = getEquipmentSuggestionText(
         "purchase_date",
-        "Введите дату покупки (YYYY-MM-DD) или оставьте пустым:",
+        `${stepLabel(step)} Введите дату покупки (YYYY-MM-DD) или оставьте пустым:`,
       );
-      return ctx.reply(prompt.text, prompt.options);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case 7:
-      return ctx.reply("Введите примечания или оставьте пустым:");
+      return ctx.reply(`${stepLabel(step)} Введите примечания или оставьте пустым:`, buildBackKeyboard());
     default:
-      return ctx.reply("Введите значение:");
+      return ctx.reply("Введите значение:", buildBackKeyboard());
   }
 }
 
@@ -195,21 +213,29 @@ function registerFlowHandlers(bot) {
     }
 
     if (flow?.type === "add_equipment") {
+      // Отмена добавления через кнопку Назад
+      if (text === LABELS.back) {
+        resetFlow(ctx);
+        return ctx.reply("Добавление отменено.", mainMenu(ctx));
+      }
+
       const data = flow.data || {};
       const now = nowIso();
 
       switch (flow.step) {
         case 1:
+          if (!text) return ctx.reply("Категория не может быть пустой. Введите значение:");
           data.category = text;
           rememberEquipmentHint("category", text);
           ctx.session.flow = { type: "add_equipment", step: 2, data };
           return sendAddEquipmentPrompt(ctx, 2);
         case 2:
-          data.brand = text;
+          data.brand = text || null;
           rememberEquipmentHint("brand", text);
           ctx.session.flow = { type: "add_equipment", step: 3, data };
           return sendAddEquipmentPrompt(ctx, 3);
         case 3:
+          if (!text) return ctx.reply("Модель не может быть пустой. Введите значение:");
           data.model = text;
           rememberEquipmentHint("model", text);
           ctx.session.flow = { type: "add_equipment", step: 4, data };
@@ -250,8 +276,21 @@ function registerFlowHandlers(bot) {
             const result = addEquipment(data);
             rememberEquipmentHints(data);
             resetFlow(ctx);
+
+            const created = findEquipmentById(result.lastInsertRowid);
+            if (created) {
+              const markup = buildEquipmentMarkup(created, isAdmin(ctx));
+              await ctx.reply("✅ Оборудование добавлено успешно.");
+              return ctx.reply(
+                renderEquipmentCard(created),
+                markup || mainMenu(ctx),
+              );
+            }
+
+            // Fallback: оборудование не нашлось сразу после вставки
             return ctx.reply(
-              `Оборудование добавлено успешно. ID: ${result.lastInsertRowid}`,
+              "✅ Оборудование добавлено успешно.",
+              mainMenu(ctx),
             );
           } catch (error) {
             logger.error("Create equipment error:", { err: error.message });
@@ -259,10 +298,12 @@ function registerFlowHandlers(bot) {
             if (error.message === "DUPLICATE_SERIAL") {
               return ctx.reply(
                 "Оборудование с таким серийным номером уже существует. Начните добавление заново.",
+                mainMenu(ctx),
               );
             }
             return ctx.reply(
               "Не удалось добавить оборудование. Попробуйте ещё раз.",
+              mainMenu(ctx),
             );
           }
         default:
@@ -334,6 +375,13 @@ function registerFlowHandlers(bot) {
     }
 
     const field = flow.data?.field;
+
+    // Обязательные поля не должны быть пустыми
+    const REQUIRED_FIELDS = ["category", "model", "serial_number"];
+    if (REQUIRED_FIELDS.includes(field) && !text) {
+      return ctx.reply("Это поле не может быть пустым. Введите значение:");
+    }
+
     if (field === "serial_number") {
       const existing = findEquipmentBySerial(text);
       if (existing && existing.id !== equipment.id) {

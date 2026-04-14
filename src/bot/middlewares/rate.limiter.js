@@ -1,0 +1,42 @@
+/**
+ * Простой in-memory rate limiter для чувствительных действий.
+ * Позволяет не более `maxCalls` вызовов за `windowMs` миллисекунд на пользователя.
+ */
+const logger = require("../../utils/logger.js");
+
+function createRateLimiter({ windowMs = 60_000, maxCalls = 5, label = "action" } = {}) {
+  const map = new Map(); // userId → { count, resetAt }
+
+  return async function rateLimiter(ctx, next) {
+    const userId = ctx.from?.id;
+    if (!userId) return next();
+
+    const now = Date.now();
+    const entry = map.get(userId);
+
+    if (!entry || now >= entry.resetAt) {
+      map.set(userId, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxCalls) {
+      const secsLeft = Math.ceil((entry.resetAt - now) / 1000);
+      logger.warn(`Rate limit hit [${label}] userId=${userId}`);
+
+      if (ctx.callbackQuery) {
+        await ctx.answerCbQuery(
+          `Слишком много запросов. Подождите ${secsLeft} сек.`,
+          { show_alert: true },
+        ).catch(() => {});
+      } else {
+        await ctx.reply(`⏳ Слишком много запросов. Подождите ${secsLeft} сек.`).catch(() => {});
+      }
+      return;
+    }
+
+    entry.count += 1;
+    return next();
+  };
+}
+
+module.exports = { createRateLimiter };

@@ -1,6 +1,6 @@
 const { isAdmin } = require("../config");
 const logger = require("../../utils/logger.js");
-const { buildEditEquipmentKeyboard } = require("../views/menus");
+const { buildEditEquipmentKeyboard, mainMenu } = require("../views/menus");
 const {
   buildEquipmentMarkup,
   renderEquipmentCard,
@@ -147,10 +147,40 @@ function registerEquipmentHandlers(bot) {
       const item = findEquipmentById(Number(ctx.match[1]));
       if (!item) return ctx.editMessageText("Оборудование не найдено");
 
-      removeEquipment(item.id);
-      return ctx.editMessageText(`Оборудование #${item.id} удалено.`);
+      const label = `${item.category || "-"} ${item.model || "-"} — ${item.serial_number || item.inventory_number || `#${item.id}`}`;
+
+      return ctx.editMessageText(
+        `❓ Удалить оборудование?\n\n${label}\n\nЭто действие необратимо.`,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback("✅ Да, удалить", `confirmDelete_${item.id}`),
+            Markup.button.callback("❌ Отмена", `open_${item.id}`),
+          ],
+        ]),
+      );
     } catch (error) {
       logger.error("Delete action error:", { err: error.message });
+      return ctx.reply("Ошибка при удалении оборудования");
+    }
+  });
+
+  bot.action(/confirmDelete_(\d+)/, async (ctx) => {
+    try {
+      if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery("Нет прав", { show_alert: true });
+      }
+
+      await ctx.answerCbQuery();
+
+      const item = findEquipmentById(Number(ctx.match[1]));
+      if (!item) return ctx.editMessageText("Оборудование уже удалено.");
+
+      const label = `${item.category || "-"} ${item.model || "-"} — ${item.serial_number || item.inventory_number || `#${item.id}`}`;
+      removeEquipment(item.id);
+      await ctx.editMessageText(`🗑️ Оборудование удалено: ${label}`);
+      return ctx.reply("Выберите действие:", mainMenu(ctx));
+    } catch (error) {
+      logger.error("ConfirmDelete action error:", { err: error.message });
       return ctx.reply("Ошибка при удалении оборудования");
     }
   });
@@ -194,16 +224,21 @@ function registerEquipmentHandlers(bot) {
 
   bot.action(/give_(\d+)/, async (ctx) => {
     try {
-      await ctx.answerCbQuery();
-
       const item = findEquipmentById(Number(ctx.match[1]));
-      if (!item) return ctx.reply("Оборудование не найдено");
+      if (!item) {
+        await ctx.answerCbQuery("Оборудование не найдено", { show_alert: true });
+        return;
+      }
       if (item.status !== STATUS.IN_STOCK) {
-        return ctx.reply("Оборудование уже недоступно для выдачи.");
+        await ctx.answerCbQuery("Оборудование уже недоступно для выдачи", { show_alert: true });
+        return;
       }
       if (item.current_holder_user_id === ctx.from.id) {
-        return ctx.reply("Вы уже держите это оборудование.");
+        await ctx.answerCbQuery("Вы уже держите это оборудование", { show_alert: true });
+        return;
       }
+
+      await ctx.answerCbQuery("✅ Выдано");
 
       const updated = giveEquipmentToUser(item, ctx.from.id, nowIso());
       const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
@@ -219,14 +254,21 @@ function registerEquipmentHandlers(bot) {
 
   bot.action(/return_(\d+)/, async (ctx) => {
     try {
-      await ctx.answerCbQuery();
-
       const item = findEquipmentById(Number(ctx.match[1]));
-      if (!item) return ctx.reply("Оборудование не найдено");
-      if (item.status !== STATUS.WITH_USER) return ctx.reply("Оборудование не выдано.");
-      if (item.current_holder_user_id !== ctx.from.id) {
-        return ctx.reply("Это оборудование выдано другому пользователю.");
+      if (!item) {
+        await ctx.answerCbQuery("Оборудование не найдено", { show_alert: true });
+        return;
       }
+      if (item.status !== STATUS.WITH_USER) {
+        await ctx.answerCbQuery("Оборудование уже не выдано", { show_alert: true });
+        return;
+      }
+      if (item.current_holder_user_id !== ctx.from.id) {
+        await ctx.answerCbQuery("Это оборудование выдано другому пользователю", { show_alert: true });
+        return;
+      }
+
+      await ctx.answerCbQuery("✅ Возвращено");
 
       const updated = returnEquipmentFromUser(item, ctx.from.id, nowIso());
       const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
@@ -267,11 +309,17 @@ function registerEquipmentHandlers(bot) {
 
   bot.action(/fromRepair_(\d+)/, async (ctx) => {
     try {
-      await ctx.answerCbQuery();
-
       const item = findEquipmentById(Number(ctx.match[1]));
-      if (!item) return ctx.reply("Оборудование не найдено");
-      if (item.status !== STATUS.REPAIR) return ctx.reply("Оборудование не в ремонте.");
+      if (!item) {
+        await ctx.answerCbQuery("Оборудование не найдено", { show_alert: true });
+        return;
+      }
+      if (item.status !== STATUS.REPAIR) {
+        await ctx.answerCbQuery("Оборудование уже не в ремонте", { show_alert: true });
+        return;
+      }
+
+      await ctx.answerCbQuery("✅ Возвращено из ремонта");
 
       const updated = completeRepair(item, ctx.from.id, nowIso());
       const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
