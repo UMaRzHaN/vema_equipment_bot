@@ -45,8 +45,11 @@ function createRedisClient(overrides = {}) {
 // Main client used by the application (sessions, rate limiter, etc.)
 const redis = createRedisClient();
 
-// Separate connection for BullMQ — must NOT share with regular client per BullMQ docs
-const bullRedis = createRedisClient({ maxRetriesPerRequest: null });
+// Separate connection for BullMQ — must NOT share with regular client per BullMQ docs.
+// commandTimeout must be omitted (undefined): BullMQ uses blocking commands (BLMOVE, XREAD)
+// that intentionally wait seconds for jobs. commandTimeout:0 means 0ms in ioredis (immediate
+// failure), and any finite value races with BullMQ's internal blocking timeouts.
+const bullRedis = createRedisClient({ maxRetriesPerRequest: null, commandTimeout: undefined });
 
 async function connectRedis() {
   await redis.connect();
