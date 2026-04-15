@@ -4,6 +4,7 @@ const Fastify = require('fastify');
 const cors = require('@fastify/cors');
 const logger = require('../utils/logger');
 const { httpRequestDuration, httpRequestsTotal } = require('../utils/metrics');
+const { apiAuthHook } = require('./middleware/api-auth');
 
 function createApi(bot, webhookSecret) {
   const fastify = Fastify({
@@ -14,6 +15,9 @@ function createApi(bot, webhookSecret) {
 
   // CORS
   fastify.register(cors, { origin: false });
+
+  // API key authentication — applied to all routes except /health, /metrics, /webhook
+  fastify.addHook('preHandler', apiAuthHook);
 
   // Request timing + metrics hook
   fastify.addHook('onRequest', async (req) => {

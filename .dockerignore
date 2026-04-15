@@ -1,0 +1,28 @@
+# Dependencies (rebuilt inside image)
+node_modules/
+npm-debug.log*
+
+# Secrets — never ship into image
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+tests/
+coverage/
+*.test.js
+
+# Dev tooling
+.claude/
+.git/
+.gitignore
+ecosystem.config.js
+
+# Runtime data (mounted as volumes in compose)
+logs/
+data/
+backups/
+
+# Docs
+*.md
+!README.md

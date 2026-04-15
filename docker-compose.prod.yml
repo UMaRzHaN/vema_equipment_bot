@@ -1,0 +1,163 @@
+# ────────────────────────────────────────────────────────────────────────────
+# PRODUCTION — webhook mode, Redis password, resource limits
+#
+# Pre-requisites:
+#   1. DNS A-record pointing your domain to this server
+#   2. TLS terminated by your reverse-proxy (Nginx/Caddy/Traefik) on port 443
+#   3. .env filled in (copy from .env.example, rotate all secrets)
+#
+# Deploy:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Rollback to previous image:
+#   docker compose -f docker-compose.prod.yml up -d --build --no-deps app
+#   (or) docker compose -f docker-compose.prod.yml stop app && docker compose ... up -d app
+#
+# View logs:
+#   docker compose -f docker-compose.prod.yml logs -f app
+# ────────────────────────────────────────────────────────────────────────────
+version: "3.9"
+
+services:
+  # ── Run pending migrations once, then exit ───────────────────────────────
+  migrate:
+    build:
+      context: .
+      target: release
+    command: npm run migrate
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - vema-net
+    restart: "no"
+
+  # ── Bot in webhook mode ──────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      target: release
+    image: vema-equipment-bot:latest
+    container_name: vema-bot
+    restart: unless-stopped
+    command: node src/app.js
+    ports:
+      - "127.0.0.1:3000:3000"   # Bind to loopback only — nginx proxies externally
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    networks:
+      - vema-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          require('http').get(
+            'http://localhost:' + (process.env.PORT||3000) + '/health',
+            r => process.exit(r.statusCode===200?0:1)
+          ).on('error',()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vema-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-vema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - vema-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vema} -d ${POSTGRES_DB:-vema_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: vema-redis
+    restart: unless-stopped
+    # REDIS_PASSWORD must be set in .env for production
+    command: >
+      redis-server
+      --save 60 1
+      --save 300 10
+      --loglevel warning
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
+    volumes:
+      - redis-data:/data
+    networks:
+      - vema-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  vema-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

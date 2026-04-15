@@ -6,8 +6,14 @@ const logger = require('../utils/logger');
 const { notificationsTotal } = require('../utils/metrics');
 
 /**
- * Creates and starts the notification BullMQ worker.
+ * Creates and starts the BullMQ notification worker.
+ *
+ * Returns the worker instance so the caller can close it during graceful shutdown:
+ *   const worker = startNotificationWorker(bot);
+ *   await worker.close();
+ *
  * @param {import('telegraf').Telegraf} bot
+ * @returns {import('bullmq').Worker}
  */
 function startNotificationWorker(bot) {
   const worker = new Worker(
@@ -17,9 +23,10 @@ function startNotificationWorker(bot) {
 
       for (const adminId of adminIds) {
         try {
-          await bot.telegram.sendMessage(adminId, message);
+          await bot.telegram.sendMessage(adminId, message, { parse_mode: 'HTML' });
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
+          // Log per-admin failures but continue to next admin
           logger.error({ adminId, err: err.message }, 'Failed to send notification to admin');
           notificationsTotal.inc({ status: 'failed' });
         }
@@ -28,11 +35,13 @@ function startNotificationWorker(bot) {
     {
       connection: bullRedis,
       concurrency: 1,
+      // Graceful: finish current job before stopping when worker.close() is called
+      skipStalledCheck: false,
     },
   );
 
   worker.on('completed', (job) => {
-    logger.info({ jobId: job.id }, 'Notification job completed');
+    logger.info({ jobId: job.id, jobName: job.name }, 'Notification job completed');
   });
 
   worker.on('failed', (job, err) => {

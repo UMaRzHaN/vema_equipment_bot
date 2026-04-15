@@ -7,6 +7,7 @@ const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
 const { formatDate } = require('../utils/formatters');
 
+// Queue is created lazily — bullRedis connects only when the first job is added
 const notificationQueue = new Queue('notifications', { connection: bullRedis });
 
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -19,11 +20,23 @@ function buildOverdueMessage(items, overdueDays) {
   return `⚠️ Оборудование не возвращено более ${overdueDays} дней:\n\n${lines.join('\n\n')}`;
 }
 
-async function scheduleOverdueCheck(adminIds, overdueDays) {
+/**
+ * Schedules periodic checks for overdue equipment.
+ *
+ * Returns timer handles so the caller (app.js) can cancel them during shutdown:
+ *   const timers = scheduleOverdueCheck(adminIds, days);
+ *   clearTimeout(timers.initialTimeout);
+ *   clearInterval(timers.interval);
+ *
+ * @returns {{ initialTimeout: NodeJS.Timeout, interval: NodeJS.Timeout | null }}
+ */
+function scheduleOverdueCheck(adminIds, overdueDays) {
   if (!adminIds || adminIds.length === 0) {
     logger.warn('Notification scheduler: no ADMIN_IDS, skipping');
-    return;
+    return { initialTimeout: null, interval: null };
   }
+
+  let intervalHandle = null;
 
   async function runCheck() {
     try {
@@ -35,7 +48,6 @@ async function scheduleOverdueCheck(adminIds, overdueDays) {
       logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
       const message = buildOverdueMessage(overdueItems, overdueDays);
 
-      // Push job to BullMQ — notification.worker processes it
       await notificationQueue.add(
         'sendOverdue',
         { adminIds, message },
@@ -47,12 +59,17 @@ async function scheduleOverdueCheck(adminIds, overdueDays) {
   }
 
   // First check after 1 minute, then every 12 hours
-  setTimeout(() => {
+  const initialTimeout = setTimeout(() => {
     runCheck();
-    setInterval(runCheck, CHECK_INTERVAL_MS);
+    intervalHandle = setInterval(runCheck, CHECK_INTERVAL_MS);
   }, 60_000);
 
   logger.info(`Notification scheduler started (interval=12h, threshold=${overdueDays}d)`);
+
+  return {
+    initialTimeout,
+    get interval() { return intervalHandle; },
+  };
 }
 
 module.exports = { scheduleOverdueCheck, notificationQueue };

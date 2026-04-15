@@ -1,42 +1,74 @@
+# ────────────────────────────────────────────────────────────────────────────
+# DEVELOPMENT / LOCAL — uses polling mode (no webhook / domain required)
+# Usage:
+#   cp .env.example .env   # fill in BOT_TOKEN, ADMIN_IDS
+#   docker compose up --build
+#
+# For production (webhook mode) use: docker compose -f docker-compose.prod.yml up
+# ────────────────────────────────────────────────────────────────────────────
 version: "3.9"
 
 services:
+  # ── Run pending migrations, then exit ───────────────────────────────────
+  migrate:
+    build: .
+    command: npm run migrate
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-vema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-vema}:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/${POSTGRES_DB:-vema_bot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - vema-net
+    restart: "no"
+
+  # ── Bot in polling mode ──────────────────────────────────────────────────
   app:
     build: .
-    container_name: vema-bot
+    container_name: vema-bot-dev
     restart: unless-stopped
-    command: sh -c "npm run migrate && node src/app.polling.js"
+    command: node src/app.polling.js
     ports:
       - "3000:3000"
     env_file: .env
     environment:
+      NODE_ENV: development
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-vema}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
       POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-vema}:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/${POSTGRES_DB:-vema_bot}
       REDIS_HOST: redis
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vema}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-vema_bot}
+      # No Redis password in dev
+      REDIS_PASSWORD: ""
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
-      - ./backups:/app/backups
     networks:
       - vema-net
 
   postgres:
     image: postgres:16-alpine
-    container_name: vema-postgres
+    container_name: vema-postgres-dev
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
       POSTGRES_USER: ${POSTGRES_USER:-vema}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-dev-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vema} -d ${POSTGRES_DB:-vema_bot}"]
       interval: 10s
@@ -47,15 +79,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: vema-redis
+    container_name: vema-redis-dev
     restart: unless-stopped
-    command: >
-      redis-server
-      --save 60 1
-      --loglevel warning
-      ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    command: redis-server --save 60 1 --loglevel warning
     volumes:
-      - redis-data:/data
+      - redis-dev-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -65,8 +93,8 @@ services:
       - vema-net
 
 volumes:
-  postgres-data:
-  redis-data:
+  postgres-dev-data:
+  redis-dev-data:
 
 networks:
   vema-net:

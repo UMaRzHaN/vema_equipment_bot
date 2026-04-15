@@ -2,63 +2,124 @@
 
 require('dotenv').config();
 
+const { z } = require('zod');
+
+// ─── Zod schema — single source of truth for all env vars ────────────────────
+const envSchema = z.object({
+  // Telegram
+  BOT_TOKEN:      z.string().min(10, 'BOT_TOKEN is required'),
+  WEBHOOK_URL:    z.string().url('WEBHOOK_URL must be a valid HTTPS URL').optional(),
+  WEBHOOK_SECRET: z.string().min(8).default('webhook-secret-not-set'),
+  ADMIN_IDS:      z.string().optional(),
+
+  // Server
+  PORT:     z.coerce.number().int().min(1).max(65535).default(3000),
+  NODE_ENV: z.enum(['production', 'development', 'test']).default('production'),
+
+  // PostgreSQL
+  POSTGRES_HOST:     z.string().min(1).default('localhost'),
+  POSTGRES_PORT:     z.coerce.number().int().default(5432),
+  POSTGRES_DB:       z.string().min(1).default('vema_bot'),
+  POSTGRES_USER:     z.string().min(1).default('vema'),
+  POSTGRES_PASSWORD: z.string().min(1, 'POSTGRES_PASSWORD is required'),
+
+  // Redis
+  REDIS_HOST:     z.string().min(1).default('localhost'),
+  REDIS_PORT:     z.coerce.number().int().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
+
+  // App
+  LOG_LEVEL:   z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  OVERDUE_DAYS: z.coerce.number().int().min(1).default(7),
+  SESSION_TTL:  z.coerce.number().int().min(60).default(1800),
+  API_KEY:      z.string().optional(),
+});
+
+// Parse once at module load. Throws ZodError with clear message on bad config.
+const _parsed = envSchema.safeParse(process.env);
+if (!_parsed.success) {
+  // Print all issues at once so the operator can fix in one deploy cycle.
+  const issues = _parsed.error.issues
+    .map((i) => `  ${i.path.join('.')}: ${i.message}`)
+    .join('\n');
+  // Write to stderr before logger is available
+  process.stderr.write(`[config] Environment validation failed:\n${issues}\n`);
+  process.exit(1);
+}
+
+const env = _parsed.data;
+
 const config = {
-  nodeEnv: process.env.NODE_ENV || 'production',
-  port: Number(process.env.PORT) || 3000,
+  nodeEnv: env.NODE_ENV,
+  port: env.PORT,
 
   bot: {
-    token: process.env.BOT_TOKEN || '',
-    webhookUrl: process.env.WEBHOOK_URL || '',
-    webhookSecret: process.env.WEBHOOK_SECRET || 'webhook-secret-not-set',
-    adminIds: process.env.ADMIN_IDS
-      ? process.env.ADMIN_IDS.split(',').map((id) => Number(id.trim())).filter(Boolean)
+    token:         env.BOT_TOKEN,
+    webhookUrl:    env.WEBHOOK_URL || '',
+    webhookSecret: env.WEBHOOK_SECRET,
+    adminIds:      env.ADMIN_IDS
+      ? env.ADMIN_IDS.split(',').map((id) => Number(id.trim())).filter(Boolean)
       : [],
   },
 
   db: {
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: Number(process.env.POSTGRES_PORT) || 5432,
-    database: process.env.POSTGRES_DB || 'vema_bot',
-    user: process.env.POSTGRES_USER || 'vema',
-    password: process.env.POSTGRES_PASSWORD || '',
-    max: 10,
-    idleTimeoutMillis: 30_000,
+    host:                    env.POSTGRES_HOST,
+    port:                    env.POSTGRES_PORT,
+    database:                env.POSTGRES_DB,
+    user:                    env.POSTGRES_USER,
+    password:                env.POSTGRES_PASSWORD,
+    max:                     10,
+    idleTimeoutMillis:       30_000,
     connectionTimeoutMillis: 5_000,
   },
 
   redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: Number(process.env.REDIS_PORT) || 6379,
-    password: process.env.REDIS_PASSWORD || undefined,
-    db: 0,
-    lazyConnect: true,
+    host:                 env.REDIS_HOST,
+    port:                 env.REDIS_PORT,
+    password:             env.REDIS_PASSWORD || undefined,
+    db:                   0,
+    lazyConnect:          true,
     maxRetriesPerRequest: null,
   },
 
   session: {
-    ttl: Number(process.env.SESSION_TTL) || 1800, // seconds
+    ttl: env.SESSION_TTL,
   },
 
   log: {
-    level: process.env.LOG_LEVEL || 'info',
+    level: env.LOG_LEVEL,
   },
 
-  overdueDays: Number(process.env.OVERDUE_DAYS) || 7,
+  overdueDays: env.OVERDUE_DAYS,
+  apiKey:      env.API_KEY || null,
 };
 
+/**
+ * Additional semantic validation run at startup (after logger is available).
+ * Warns about non-fatal misconfigurations rather than throwing.
+ */
 function assertConfig() {
-  if (!config.bot.token) {
-    throw new Error('BOT_TOKEN is required');
-  }
-  if (!config.bot.webhookUrl) {
-    throw new Error('WEBHOOK_URL is required (e.g. https://yourdomain.com)');
+  if (!config.bot.webhookUrl && config.nodeEnv === 'production') {
+    throw new Error('WEBHOOK_URL is required in production mode');
   }
   if (config.bot.adminIds.length === 0) {
     process.stderr.write(
       JSON.stringify({
-        ts: new Date().toISOString(),
+        ts:    new Date().toISOString(),
         level: 'warn',
-        msg: 'ADMIN_IDS not configured — admin functions will be unavailable',
+        msg:   'ADMIN_IDS not configured — admin functions will be unavailable',
+      }) + '\n',
+    );
+  }
+  if (config.bot.webhookSecret === 'webhook-secret-not-set' && config.nodeEnv === 'production') {
+    throw new Error('WEBHOOK_SECRET must be set in production (use: openssl rand -hex 32)');
+  }
+  if (!config.apiKey && config.nodeEnv === 'production') {
+    process.stderr.write(
+      JSON.stringify({
+        ts:    new Date().toISOString(),
+        level: 'warn',
+        msg:   'API_KEY not set — REST API endpoints are publicly accessible',
       }) + '\n',
     );
   }

@@ -13,23 +13,27 @@ const { createApi } = require('./api');
 const { startNotificationWorker } = require('./workers/notification.worker');
 const { scheduleOverdueCheck } = require('./services/notification.service');
 
+// Held in module scope so shutdown() can close them
+let notificationWorker = null;
+let overdueTimer = null;
+
 async function main() {
   // ── 1. Databases ──────────────────────────────────────────────────────────
   await connectRedis();
   await initDb();
 
-  // ── 2. Telegram bot ───────────────────────────────────────────────────────
+  // ── 3. Telegram bot ───────────────────────────────────────────────────────
   const bot = createBot();
 
-  // ── 3. BullMQ notification worker ────────────────────────────────────────
-  startNotificationWorker(bot);
+  // ── 4. BullMQ notification worker ────────────────────────────────────────
+  notificationWorker = startNotificationWorker(bot);
 
-  // ── 4. Fastify API + webhook route ────────────────────────────────────────
+  // ── 5. Fastify API + webhook route ────────────────────────────────────────
   const api = createApi(bot, config.bot.webhookSecret);
   await api.listen({ port: config.port, host: '0.0.0.0' });
   logger.info(`API listening on port ${config.port}`);
 
-  // ── 5. Register Telegram webhook ─────────────────────────────────────────
+  // ── 6. Register Telegram webhook ─────────────────────────────────────────
   const webhookUrl = `${config.bot.webhookUrl}/webhook`;
   await bot.telegram.setWebhook(webhookUrl, {
     secret_token: config.bot.webhookSecret,
@@ -37,8 +41,8 @@ async function main() {
   });
   logger.info(`Webhook set → ${webhookUrl}`);
 
-  // ── 6. Overdue notification scheduler ────────────────────────────────────
-  scheduleOverdueCheck(config.bot.adminIds, config.overdueDays);
+  // ── 7. Overdue notification scheduler ────────────────────────────────────
+  overdueTimer = scheduleOverdueCheck(config.bot.adminIds, config.overdueDays);
 
   logger.info('Bot started in webhook mode');
 }
@@ -47,8 +51,19 @@ async function main() {
 async function shutdown(signal) {
   logger.info(`Received ${signal}, shutting down…`);
   try {
+    // Stop accepting new jobs; finish current job first
+    if (notificationWorker) {
+      await notificationWorker.close();
+      logger.info('Notification worker closed');
+    }
+    // Cancel the overdue check timer so it doesn't fire during shutdown
+    if (overdueTimer) {
+      clearTimeout(overdueTimer.initialTimeout);
+      clearInterval(overdueTimer.interval);
+    }
     await closeDb();
     await closeRedis();
+    logger.info('Shutdown complete');
   } catch (err) {
     logger.error({ err: err.message }, 'Shutdown error');
   }
