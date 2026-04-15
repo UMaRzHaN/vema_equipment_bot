@@ -1,7 +1,8 @@
 'use strict';
 
+const { Markup } = require('telegraf');
 const { ensureSession, resetFlow } = require('../utils');
-const { saveUser, getUserByTelegramId } = require('../../services/user.service');
+const { deleteUserAccount, saveUser, getUserByTelegramId } = require('../../services/user.service');
 const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
 const { safe } = require('../middlewares/error.handler');
@@ -58,6 +59,38 @@ function registerProfileHandlers(bot) {
     resetFlow(ctx);
     return ctx.reply('Главное меню', mainMenu(ctx));
   }, 'profile:mainMenu'));
+
+  bot.hears('🗑️ Удалить профиль', safe((ctx) => {
+    resetFlow(ctx);
+    return ctx.reply(
+      '⚠️ Удалить профиль?\n\nВсе ваши данные будут удалены безвозвратно.',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Да, удалить', 'confirm_delete_profile')],
+        [Markup.button.callback('❌ Отмена', 'cancel_delete_profile')],
+      ]),
+    );
+  }, 'profile:deletePrompt'));
+
+  bot.action('confirm_delete_profile', safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await deleteUserAccount(ctx.from.id);
+    } catch (err) {
+      if (err.code === 'HAS_EQUIPMENT') {
+        return ctx.editMessageText(`❌ ${err.message}`);
+      }
+      throw err;
+    }
+    ctx.session = {};
+    await ctx.editMessageText('✅ Профиль удалён.');
+    return ctx.reply('Для повторной регистрации нажмите /start.');
+  }, 'profile:confirmDelete'));
+
+  bot.action('cancel_delete_profile', safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage().catch(() => {});
+    return renderProfileCard(ctx);
+  }, 'profile:cancelDelete'));
 
   // ── TEXT ──────────────────────────────────────────────────────────────────
   bot.on('text', safe(async (ctx, next) => {

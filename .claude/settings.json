@@ -12,7 +12,12 @@
       "Bash(node --check src/workers/notification.worker.js)",
       "Bash(node --check src/bot/index.js)",
       "Bash(node --check src/app.polling.js)",
-      "Bash(node --check src/bot/helpers/equipmentHints.js)"
+      "Bash(node --check src/bot/helpers/equipmentHints.js)",
+      "Bash(node --check src/repositories/user.repo.js)",
+      "Bash(node --check src/services/user.service.js)",
+      "Bash(node --check src/bot/utils/profile.utils.js)",
+      "Bash(node --check src/bot/handlers/profile.handlers.js)",
+      "Bash(node --check src/bot/handlers/navigation.handlers.js)"
     ]
   }
 }

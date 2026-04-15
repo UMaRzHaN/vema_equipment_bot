@@ -1,6 +1,6 @@
 'use strict';
 
-const { countUsers, findUserByTelegramId, getAllUsers, setUserRole, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
+const { countUsers, deleteUserByTelegramId, findUserByTelegramId, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
 
 async function saveTelegramUser(from) {
   return upsertTelegramUser(from);
@@ -50,4 +50,10 @@ async function assignUserRole(telegramUserId, role) {
   await setUserRole(telegramUserId, role);
 }
 
-module.exports = { assignUserRole, formatUser, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged, saveTelegramUser, saveUser };
+async function deleteUserAccount(telegramUserId) {
+  const active = await hasActiveEquipment(telegramUserId);
+  if (active) throw Object.assign(new Error('Верните всё оборудование перед удалением профиля.'), { code: 'HAS_EQUIPMENT' });
+  await deleteUserByTelegramId(telegramUserId);
+}
+
+module.exports = { assignUserRole, deleteUserAccount, formatUser, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged, saveTelegramUser, saveUser };

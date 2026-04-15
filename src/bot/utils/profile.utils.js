@@ -3,15 +3,27 @@
 const { ensureSession, resetFlow } = require('../utils');
 const { getUserByTelegramId } = require('../../services/user.service');
 
+const ROLE_LABELS = {
+  user:    '👤 Пользователь',
+  manager: '📋 Менеджер',
+  admin:   '👑 Администратор',
+};
+
 async function renderProfileCard(ctx) {
   const user = await getUserByTelegramId(ctx.from.id);
   if (!user) return ctx.reply('Профиль не найден. Введите /start для регистрации.');
 
+  const role = ROLE_LABELS[user.role] || ROLE_LABELS.user;
+
   return ctx.reply(
-    `👤 Профиль:\n\nИмя: ${user.first_name || '—'}\nФамилия: ${user.last_name || '—'}\nТелефон: ${user.phone || '—'}`,
+    `👤 Профиль:\n\nИмя: ${user.first_name || '—'}\nФамилия: ${user.last_name || '—'}\nТелефон: ${user.phone || '—'}\nРоль: ${role}`,
     {
       reply_markup: {
-        keyboard: [['✏️ Имя'], ['✏️ Фамилия'], ['📱 Телефон'], ['🏠 Главное меню']],
+        keyboard: [
+          ['✏️ Имя', '✏️ Фамилия'],
+          ['📱 Телефон', '🗑️ Удалить профиль'],
+          ['🏠 Главное меню'],
+        ],
         resize_keyboard: true,
       },
     },

@@ -167,7 +167,7 @@ function registerNavigationHandlers(bot) {
     if (!user) return ctx.answerCbQuery('Пользователь не найден.', { show_alert: true });
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
     return ctx.editMessageText(
-      `👤 ${name}\nТекущая роль: ${user.role || 'user'}\n\nВыберите новую роль:`,
+      `👤 ${name}\nТелефон: ${user.phone || '—'}\nТекущая роль: ${user.role || 'user'}\n\nВыберите новую роль:`,
       buildRoleSelectKeyboard(telegramUserId),
     );
   }, 'set_role_select'));

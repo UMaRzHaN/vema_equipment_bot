@@ -62,4 +62,16 @@ async function countUsers() {
   return Number(result.rows[0].cnt);
 }
 
-module.exports = { countUsers, findUserByTelegramId, getAllUsers, setUserRole, upsertTelegramUser, updateUserProfile };
+async function hasActiveEquipment(telegramId) {
+  const r = await query(
+    "SELECT 1 FROM equipment WHERE current_holder_user_id = $1 AND status != 'списано' LIMIT 1",
+    [telegramId],
+  );
+  return r.rows.length > 0;
+}
+
+async function deleteUserByTelegramId(telegramId) {
+  await query('DELETE FROM users WHERE telegram_user_id = $1', [telegramId]);
+}
+
+module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };
