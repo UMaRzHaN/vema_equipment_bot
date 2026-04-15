@@ -1,12 +1,15 @@
 'use strict';
 
+const { CURRENT_SCHEMA_VERSION } = require('./state-migrator');
+
 /** @returns {import('./types').BotSession} */
 function defaultSession() {
   return {
-    flow:        null,
-    mode:        null,
-    listPage:    0,
-    summaryPage: 0,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    flow:          null,
+    mode:          null,
+    listPage:      0,
+    summaryPage:   0,
   };
 }
 

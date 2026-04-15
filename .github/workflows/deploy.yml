@@ -4,8 +4,15 @@ on:
   push:
     branches: [main]
 
+# Only one deploy at a time — cancel previous if new push arrives
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Never cancel an in-flight deploy
+
 jobs:
+  # ─── Tests (fast gate before deploy) ─────────────────────────────────────────
   test:
+    name: Test gate
     runs-on: ubuntu-latest
 
     services:
@@ -14,9 +21,9 @@ jobs:
         env:
           POSTGRES_DB: vema_bot
           POSTGRES_USER: vema
-          POSTGRES_PASSWORD: test
+          POSTGRES_PASSWORD: testpassword
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U vema -d vema_bot"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -34,38 +41,127 @@ jobs:
           - 6379:6379
 
     env:
-      DATABASE_URL: postgresql://vema:test@localhost:5432/vema_bot
+      NODE_ENV: test
+      BOT_TOKEN: test-token-ci-placeholder
+      WEBHOOK_URL: https://test.example.com
+      WEBHOOK_SECRET: deploy-test-webhook-secret-32c
+      DATABASE_URL: postgresql://vema:testpassword@localhost:5432/vema_bot
+      POSTGRES_HOST: localhost
+      POSTGRES_DB: vema_bot
+      POSTGRES_USER: vema
+      POSTGRES_PASSWORD: testpassword
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: ""
+      ADMIN_IDS: "12345"
+      LOG_LEVEL: error
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - run: npm ci
-
       - run: npm run migrate
+      - run: npm test
 
-      - run: npm test --if-present
-
-  deploy:
+  # ─── Build and push Docker image ──────────────────────────────────────────────
+  build:
+    name: Build & Push image
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Login to Docker Hub (set DOCKERHUB_USERNAME + DOCKERHUB_TOKEN secrets)
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/vema-equipment-bot
+          tags: |
+            type=sha,prefix=git-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Deploy ───────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DO_HOST }}
-          username: root
-          key: ${{ secrets.DO_SSH_KEY }}
+          host:     ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_SSH_USER }}
+          key:      ${{ secrets.DO_SSH_KEY }}
           script: |
+            set -euo pipefail
+
             cd /opt/vema-bot
+
+            echo "=== Pull latest code ==="
             git pull origin main
-            docker compose up -d --build --no-deps app
-            sleep 10
-            curl -fsS http://localhost:3000/health || exit 1
-            echo "Deploy successful"
+
+            echo "=== Pull new Docker image ==="
+            docker compose -f docker-compose.prod.yml pull app
+
+            echo "=== Run migrations ==="
+            docker compose -f docker-compose.prod.yml run --rm migrate
+
+            echo "=== Verify DB integrity ==="
+            docker compose -f docker-compose.prod.yml run --rm app node scripts/verify-integrity.js
+
+            echo "=== Zero-downtime restart ==="
+            docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans app
+
+            echo "=== Wait for readiness (30s timeout) ==="
+            for i in $(seq 1 30); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ready || true)
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ Service is ready (attempt $i)"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "❌ Service not ready after 30s — initiating rollback"
+                docker compose -f docker-compose.prod.yml stop app
+                docker compose -f docker-compose.prod.yml up -d --no-deps app
+                exit 1
+              fi
+              echo "Waiting... ($i/30, status=$STATUS)"
+              sleep 1
+            done
+
+            echo "=== Final health check ==="
+            curl -fsS http://localhost:3000/health || { echo "Health check failed"; exit 1; }
+
+            echo "=== Deploy successful ==="
+            docker compose -f docker-compose.prod.yml ps

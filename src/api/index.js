@@ -5,16 +5,22 @@ const cors = require('@fastify/cors');
 const logger = require('../utils/logger');
 const { httpRequestDuration, httpRequestsTotal } = require('../utils/metrics');
 const { apiAuthHook } = require('./middleware/api-auth');
+const { correlationIdHook } = require('./middleware/correlation-id');
 
 function createApi(bot, webhookSecret) {
   const fastify = Fastify({
     logger: false,
     trustProxy: true,
     bodyLimit: 1024 * 1024, // 1 MB
+    // Fastify genReqId: используем correlation ID как req.id
+    genReqId: () => require('crypto').randomUUID(),
   });
 
   // CORS
   fastify.register(cors, { origin: false });
+
+  // Correlation ID — добавляет X-Correlation-Id к каждому запросу/ответу
+  fastify.addHook('onRequest', correlationIdHook);
 
   // API key authentication — applied to all routes except /health, /metrics, /webhook
   fastify.addHook('preHandler', apiAuthHook);
@@ -35,10 +41,11 @@ function createApi(bot, webhookSecret) {
 
     logger.info({
       method,
-      url:    req.url,
-      status: reply.statusCode,
-      ms:     Math.round(duration * 1000),
-      userId: req.headers['x-user-id'] || undefined,
+      url:           req.url,
+      status:        reply.statusCode,
+      ms:            Math.round(duration * 1000),
+      correlationId: req.correlationId,
+      userId:        req.headers['x-user-id'] || undefined,
     }, 'http');
   });
 
@@ -61,6 +68,7 @@ function createApi(bot, webhookSecret) {
 
   // Application routes
   fastify.register(require('./routes/health'));
+  fastify.register(require('./routes/ready'));
   fastify.register(require('./routes/equipment'));
   fastify.register(require('./routes/actions'));
   fastify.register(require('./routes/metrics'));

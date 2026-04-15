@@ -12,7 +12,7 @@ const { config } = require('../../config');
  */
 async function apiAuthHook(req, reply) {
   // Public endpoints — never require auth
-  const PUBLIC_PATHS = new Set(['/health', '/metrics', '/webhook']);
+  const PUBLIC_PATHS = new Set(['/health', '/ready', '/metrics', '/webhook']);
   if (PUBLIC_PATHS.has(req.routeOptions?.url || req.url)) return;
 
   // Auth not configured — allow all (warned at startup)

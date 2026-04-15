@@ -1,5 +1,8 @@
 'use strict';
 
+// MUST be first — instruments HTTP/PG/Redis before any other require
+require('./tracing').setup();
+
 require('dotenv').config();
 
 const { assertConfig, config } = require('./config');
@@ -7,11 +10,12 @@ assertConfig();
 
 const logger = require('./utils/logger');
 const { initDb, closeDb } = require('./db');
-const { connectRedis, closeRedis } = require('./redis');
+const { redis, connectRedis, closeRedis } = require('./redis');
 const { createBot } = require('./bot');
 const { createApi } = require('./api');
 const { startNotificationWorker } = require('./workers/notification.worker');
 const { scheduleOverdueCheck } = require('./services/notification.service');
+const { flags } = require('./lib/feature-flags');
 
 // Held in module scope so shutdown() can close them
 let notificationWorker = null;
@@ -21,6 +25,9 @@ async function main() {
   // ── 1. Databases ──────────────────────────────────────────────────────────
   await connectRedis();
   await initDb();
+
+  // Inject Redis into feature flags after connection is established
+  flags.setRedis(redis);
 
   // ── 3. Telegram bot ───────────────────────────────────────────────────────
   const bot = createBot();
