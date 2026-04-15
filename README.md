@@ -1,4 +1,4 @@
-# VEMA Equipment Bot
+# Equipment Bot
 
 Telegram-бот для учёта оборудования на базе Node.js, PostgreSQL и Redis.
 
