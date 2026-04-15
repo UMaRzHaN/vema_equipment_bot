@@ -39,11 +39,12 @@ function createBot() {
   // ── Global error handler ──────────────────────────────────────────────────
   bot.catch(async (err, ctx) => {
     botErrorsTotal.inc();
-    logger.error('Bot error', {
-      err: err.message,
+    logger.error({
+      err: err?.message,
+      stack: err?.stack,
       updateType: ctx.updateType,
       userId: ctx.from?.id,
-    });
+    }, 'Bot error');
     try {
       if (ctx.callbackQuery) {
         await ctx.answerCbQuery('Произошла ошибка. Попробуйте ещё раз.', { show_alert: true }).catch(() => {});

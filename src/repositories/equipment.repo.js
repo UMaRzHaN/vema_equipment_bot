@@ -54,11 +54,22 @@ async function getAllEquipment() {
   return result.rows;
 }
 
+
 async function searchEquipment(searchQuery) {
-  const like = `%${searchQuery}%`;
+  if (!searchQuery || searchQuery.trim().length < 2) return [];
+  const term = searchQuery.trim();
+  const like = `%${term}%`;
   const result = await query(
     `SELECT e.*,
-            u.first_name, u.last_name, u.username
+            u.first_name, u.last_name, u.username,
+            similarity(
+              coalesce(e.category,'') || ' ' ||
+              coalesce(e.brand,'')    || ' ' ||
+              coalesce(e.model,'')    || ' ' ||
+              coalesce(e.serial_number,'') || ' ' ||
+              coalesce(e.inventory_number,''),
+              $2
+            ) AS _score
      FROM equipment e
      LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
      WHERE e.category ILIKE $1
@@ -66,9 +77,9 @@ async function searchEquipment(searchQuery) {
         OR e.model ILIKE $1
         OR e.serial_number ILIKE $1
         OR e.inventory_number ILIKE $1
-     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC
+     ORDER BY _score DESC, e.inventory_number ASC NULLS LAST, e.id ASC
      LIMIT 20`,
-    [like],
+    [like, term],
   );
   return result.rows;
 }
@@ -144,20 +155,25 @@ async function getEquipmentStats() {
  */
 async function atomicStatusChange(statusData, historyData) {
   return transaction(async (client) => {
-    await client.query(
+    const updateResult = await client.query(
       `UPDATE equipment
        SET status = $1,
            current_holder_user_id = $2,
            current_issue_date = $3,
            updated_at = NOW()
-       WHERE id = $4`,
+       WHERE id = $4
+         AND ($5::text IS NULL OR status = $5)`,
       [
         statusData.status,
         statusData.current_holder_user_id ?? null,
         statusData.current_issue_date ?? null,
         statusData.id,
+        historyData.from_status ?? null,
       ],
     );
+    if (updateResult.rowCount === 0) {
+      throw Object.assign(new Error('STATUS_CONFLICT'), { code: 'STATUS_CONFLICT' });
+    }
 
     await client.query(
       `INSERT INTO history
@@ -178,15 +194,27 @@ async function atomicStatusChange(statusData, historyData) {
   });
 }
 
-async function getSuggestionsForField(field) {
-  const allowed = new Set(['category', 'brand', 'model', 'inventory_number', 'purchase_date']);
-  if (!allowed.has(field)) return [];
+async function getSuggestionsForField(field, category = null) {
+  // Map to literal column names — never interpolate user-supplied strings into SQL
+  const COLUMN_MAP = {
+    category:         'category',
+    brand:            'brand',
+    model:            'model',
+    inventory_number: 'inventory_number',
+    purchase_date:    'purchase_date',
+  };
+  const col = COLUMN_MAP[field];
+  if (!col) return [];
+  const params = [];
+  const categoryFilter = category ? (params.push(category), `AND category = $${params.length}`) : '';
   const result = await query(
-    `SELECT DISTINCT ${field} AS value
+    `SELECT DISTINCT ${col} AS value
      FROM equipment
-     WHERE ${field} IS NOT NULL AND ${field} != ''
+     WHERE ${col} IS NOT NULL AND ${col} != ''
+     ${categoryFilter}
      ORDER BY value
      LIMIT 6`,
+    params,
   );
   return result.rows.map((r) => r.value).filter(Boolean);
 }

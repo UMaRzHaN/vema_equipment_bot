@@ -6,25 +6,24 @@ const { getEquipmentTimeline, getLastRepairComment } = require('../../services/h
 const { formatUser, getUserByTelegramId } = require('../../services/user.service');
 const { formatDate, statusLabel } = require('../../utils/formatters');
 
-function buildEquipmentButtons(item, canManage = false) {
+function buildEquipmentButtons(item, { canAdmin = false, canRepair = false } = {}) {
   const rows = [];
 
   if (item.status === STATUS.IN_STOCK) {
-    rows.push([
-      Markup.button.callback('📤 Выдать', `give_${item.id}`),
-      Markup.button.callback('🔧 В ремонт', `repair_${item.id}`),
-    ]);
+    const row = [Markup.button.callback('📤 Взять себе', `give_${item.id}`)];
+    if (canRepair) row.push(Markup.button.callback('🔧 В ремонт', `repair_${item.id}`));
+    rows.push(row);
   }
   if (item.status === STATUS.WITH_USER) {
     rows.push([Markup.button.callback('↩️ Вернуть', `return_${item.id}`)]);
   }
-  if (item.status === STATUS.REPAIR) {
+  if (item.status === STATUS.REPAIR && canRepair) {
     rows.push([Markup.button.callback('♻️ Из ремонта', `fromRepair_${item.id}`)]);
   }
   if (item.status !== STATUS.WRITTEN_OFF) {
     rows.push([Markup.button.callback('📋 История', `history_${item.id}`)]);
   }
-  if (canManage) {
+  if (canAdmin) {
     const adminRow = [
       Markup.button.callback('✏️ Редактировать', `edit_${item.id}`),
       Markup.button.callback('🗑️ Удалить', `delete_${item.id}`),
@@ -38,8 +37,8 @@ function buildEquipmentButtons(item, canManage = false) {
   return rows;
 }
 
-function buildEquipmentMarkup(item, canManage = false) {
-  const rows = buildEquipmentButtons(item, canManage);
+function buildEquipmentMarkup(item, { canAdmin = false, canRepair = false } = {}) {
+  const rows = buildEquipmentButtons(item, { canAdmin, canRepair });
   return rows.length ? Markup.inlineKeyboard(rows) : null;
 }
 

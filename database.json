@@ -1,0 +1,4 @@
+{
+  "defaultDatabase": "vema_bot",
+  "url": { "ENV": "DATABASE_URL" }
+}

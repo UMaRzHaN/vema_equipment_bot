@@ -32,7 +32,7 @@ async function scheduleOverdueCheck(adminIds, overdueDays) {
         logger.info('Overdue check: no overdue items');
         return;
       }
-      logger.info(`Overdue check: ${overdueItems.length} overdue items`, { count: overdueItems.length });
+      logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
       const message = buildOverdueMessage(overdueItems, overdueDays);
 
       // Push job to BullMQ — notification.worker processes it
@@ -42,7 +42,7 @@ async function scheduleOverdueCheck(adminIds, overdueDays) {
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
     } catch (err) {
-      logger.error('Overdue check failed', { err: err.message });
+      logger.error({ err: err.message }, 'Overdue check failed');
     }
   }
 

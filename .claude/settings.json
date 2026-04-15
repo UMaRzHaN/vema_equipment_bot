@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(node --check src/repositories/equipment.repo.js)",
+      "Bash(node --check src/services/equipment.service.js)",
+      "Bash(node --check src/bot/middlewares/rate.limiter.js)",
+      "Bash(node --check src/bot/handlers/flow.handlers.js)",
+      "Bash(node --check src/api/index.js)",
+      "Bash(node --check src/bot/middlewares/session.middleware.js)",
+      "Bash(node --check src/workers/notification.worker.js)",
+      "Bash(node --check src/bot/index.js)",
+      "Bash(node --check src/app.polling.js)",
+      "Bash(node --check src/bot/helpers/equipmentHints.js)"
+    ]
+  }
+}

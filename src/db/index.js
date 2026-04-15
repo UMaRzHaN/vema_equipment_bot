@@ -1,26 +1,19 @@
 'use strict';
 
 const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
 const { config } = require('../config');
 const logger = require('../utils/logger');
 
 const pool = new Pool(config.db);
 
 pool.on('error', (err) => {
-  logger.error('PostgreSQL pool error', { err: err.message });
+  logger.error({ err: err.message }, 'PostgreSQL pool error');
 });
 
 async function initDb() {
-  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-  const client = await pool.connect();
-  try {
-    await client.query(schema);
-    logger.info('Database schema applied');
-  } finally {
-    client.release();
-  }
+  // Schema is now managed by node-pg-migrate.
+  // Run `npm run migrate` (or the docker-compose command) to apply pending migrations.
+  logger.info('Database schema managed by node-pg-migrate');
 }
 
 /**

@@ -20,7 +20,7 @@ function startNotificationWorker(bot) {
           await bot.telegram.sendMessage(adminId, message);
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
-          logger.error('Failed to send notification to admin', { adminId, err: err.message });
+          logger.error({ adminId, err: err.message }, 'Failed to send notification to admin');
           notificationsTotal.inc({ status: 'failed' });
         }
       }
@@ -32,15 +32,15 @@ function startNotificationWorker(bot) {
   );
 
   worker.on('completed', (job) => {
-    logger.info('Notification job completed', { jobId: job.id });
+    logger.info({ jobId: job.id }, 'Notification job completed');
   });
 
   worker.on('failed', (job, err) => {
-    logger.error('Notification job failed', { jobId: job?.id, err: err.message });
+    logger.error({ jobId: job?.id, err: err.message }, 'Notification job failed');
   });
 
   worker.on('error', (err) => {
-    logger.error('Notification worker error', { err: err.message });
+    logger.error({ err: err.message }, 'Notification worker error');
   });
 
   logger.info('Notification worker started');

@@ -1,6 +1,6 @@
 'use strict';
 
-const { saveTelegramUser } = require('../../services/user.service');
+const { getUserByTelegramId, saveTelegramUser } = require('../../services/user.service');
 const logger = require('../../utils/logger');
 
 function registerUserMiddleware(bot) {
@@ -9,8 +9,11 @@ function registerUserMiddleware(bot) {
     if (ctx.session?.flow?.type === 'register_profile') return next();
     try {
       await saveTelegramUser(ctx.from);
+      const user = await getUserByTelegramId(ctx.from.id);
+      ctx.session ??= {};
+      ctx.session.userRole = user?.role || 'user';
     } catch (err) {
-      logger.error('User upsert error', { err: err.message, userId: ctx.from.id });
+      logger.error({ err: err.message, userId: ctx.from.id }, 'User upsert error');
     }
     return next();
   });

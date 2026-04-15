@@ -8,6 +8,7 @@ const FLOW_TYPE = Object.freeze({
   WRITEOFF:         'writeoff',
   REGISTER_PROFILE: 'register_profile',
   EDIT_PROFILE:     'edit_profile',
+  ASSIGN_ROLE:      'assign_role',
 });
 
 const ADD_STEP = Object.freeze({

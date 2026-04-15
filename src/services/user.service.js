@@ -1,6 +1,6 @@
 'use strict';
 
-const { findUserByTelegramId, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
+const { countUsers, findUserByTelegramId, getAllUsers, setUserRole, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
 
 async function saveTelegramUser(from) {
   return upsertTelegramUser(from);
@@ -37,4 +37,17 @@ function formatUser(user) {
   return String(user.telegram_user_id);
 }
 
-module.exports = { formatUser, getUserByTelegramId, isUserProfileComplete, saveTelegramUser, saveUser };
+async function listAllUsersPaged({ page = 0, limit = 5 } = {}) {
+  const offset = page * limit;
+  const [users, total] = await Promise.all([
+    getAllUsers({ limit, offset }),
+    countUsers(),
+  ]);
+  return { users, total, page, limit, totalPages: Math.max(Math.ceil(total / limit), 1) };
+}
+
+async function assignUserRole(telegramUserId, role) {
+  await setUserRole(telegramUserId, role);
+}
+
+module.exports = { assignUserRole, formatUser, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged, saveTelegramUser, saveUser };

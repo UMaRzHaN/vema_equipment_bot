@@ -1,8 +1,10 @@
 'use strict';
 
-const { isAdmin } = require('../config');
+const { isEffectiveAdmin, isEffectiveManager } = require('../config');
 const logger = require('../../utils/logger');
+const { safe } = require('../middlewares/error.handler');
 const { EDITABLE_FIELDS, LABELS } = require('../labels');
+const { validateEquipmentCreate, validateEquipmentUpdate } = require('../validation/equipment.schema');
 const { buildBackKeyboard, mainMenu } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession, resetFlow } = require('../utils');
@@ -46,17 +48,18 @@ function mergeWithBackKeyboard(options) {
 }
 
 async function sendAddPrompt(ctx, step) {
+  const category = ctx.session?.flow?.data?.category || null;
   switch (step) {
     case ADD_STEP.CATEGORY: {
       const p = await getEquipmentSuggestionText('category', `${stepLabel(step)} Введите категорию:`);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
     }
     case ADD_STEP.BRAND: {
-      const p = await getEquipmentSuggestionText('brand', `${stepLabel(step)} Введите бренд:`);
+      const p = await getEquipmentSuggestionText('brand', `${stepLabel(step)} Введите бренд:`, category);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
     }
     case ADD_STEP.MODEL: {
-      const p = await getEquipmentSuggestionText('model', `${stepLabel(step)} Введите модель:`);
+      const p = await getEquipmentSuggestionText('model', `${stepLabel(step)} Введите модель:`, category);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
     }
     case ADD_STEP.SERIAL:
@@ -64,7 +67,7 @@ async function sendAddPrompt(ctx, step) {
     case ADD_STEP.INVENTORY:
       return ctx.reply(`${stepLabel(step)} Введите инвентарный номер (или оставьте пустым):`, buildBackKeyboard());
     case ADD_STEP.PURCHASE_DATE: {
-      const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (YYYY-MM-DD) или оставьте пустым:`);
+      const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (YYYY-MM-DD) или оставьте пустым:`, category);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
     }
     case ADD_STEP.NOTES:
@@ -82,7 +85,7 @@ function rememberMessage(message) {
 async function safeDelete(ctx, ref, label) {
   if (!ref) return;
   try { await ctx.telegram.deleteMessage(ref.chatId, ref.messageId); }
-  catch (err) { logger.warn(`${label}: ${err.message}`); }
+  catch (err) { logger.warn({ label, err: err.message }, 'safeDelete failed'); }
 }
 
 // ── Add Equipment flow ────────────────────────────────────────────────────────
@@ -132,19 +135,27 @@ async function handleAddEquipment(ctx, text, flow) {
 
     case ADD_STEP.NOTES:
       data.notes = normalizeOptionalValue(text);
-      try {
-        const created = await addEquipment(data);
-        equipmentActionsTotal.inc({ action: 'created' });
-        resetFlow(ctx);
-        const markup = buildEquipmentMarkup(created, isAdmin(ctx));
-        const card   = await renderEquipmentCard(created);
-        await ctx.reply('✅ Оборудование добавлено успешно.');
-        return ctx.reply(card, markup || mainMenu(ctx));
-      } catch (err) {
-        logger.error('Create equipment error', { err: err.message });
-        resetFlow(ctx);
-        if (err.message === 'DUPLICATE_SERIAL') return ctx.reply('Серийный номер уже существует. Начните заново.', mainMenu(ctx));
-        return ctx.reply('Не удалось добавить оборудование.', mainMenu(ctx));
+      {
+        const validation = validateEquipmentCreate(data);
+        if (!validation.success) {
+          resetFlow(ctx);
+          const msg = validation.error.errors.map((e) => e.message).join(', ');
+          return ctx.reply(`Ошибка данных: ${msg}. Начните заново.`, mainMenu(ctx));
+        }
+        try {
+          const created = await addEquipment(validation.data);
+          equipmentActionsTotal.inc({ action: 'created' });
+          resetFlow(ctx);
+          const markup = buildEquipmentMarkup(created, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+          const card   = await renderEquipmentCard(created);
+          await ctx.reply('✅ Оборудование добавлено успешно.');
+          return ctx.reply(card, markup || mainMenu(ctx));
+        } catch (err) {
+          logger.error({ err: err.message }, 'Create equipment error');
+          resetFlow(ctx);
+          if (err.message === 'DUPLICATE_SERIAL') return ctx.reply('Серийный номер уже существует. Начните заново.', mainMenu(ctx));
+          return ctx.reply('Не удалось добавить оборудование.', mainMenu(ctx));
+        }
       }
 
     default:
@@ -160,7 +171,7 @@ async function handleRepair(ctx, text, flow) {
 
   const updated = await startRepair(equipment, ctx.from.id, text);
   equipmentActionsTotal.inc({ action: 'repair_started' });
-  const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+  const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
 
   await safeDelete(ctx, flow.sourceMessage, 'repair:source');
   await safeDelete(ctx, flow.promptMessage, 'repair:prompt');
@@ -177,7 +188,7 @@ async function handleWriteoff(ctx, text, flow) {
   const comment = text === '—' ? null : text;
   const updated = await writeOffEquipment(equipment, ctx.from.id, comment);
   equipmentActionsTotal.inc({ action: 'written_off' });
-  const markup = buildEquipmentMarkup(updated, isAdmin(ctx));
+  const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
 
   await safeDelete(ctx, flow.sourceMessage, 'writeoff:source');
   await safeDelete(ctx, flow.promptMessage, 'writeoff:prompt');
@@ -225,19 +236,20 @@ async function handleEditEquipment(ctx, text, flow) {
   }
 
   const { field } = flow.data;
-  const REQUIRED = ['category', 'model', 'serial_number'];
-  if (REQUIRED.includes(field) && !text) return ctx.reply('Это поле не может быть пустым.');
+
+  // Validate via Zod before touching the DB
+  const valResult = validateEquipmentUpdate({ [field]: text || null });
+  if (!valResult.success) return ctx.reply(`Неверное значение: ${valResult.error.errors[0]?.message}`);
 
   if (field === 'serial_number') {
     const existing = await findEquipmentBySerial(text);
     if (existing && Number(existing.id) !== Number(equipment.id)) return ctx.reply('Серийный номер уже существует. Введите другой:');
   }
-  if (field === 'purchase_date' && text && !isValidDate(text)) return ctx.reply('Неверный формат. Используйте YYYY-MM-DD:');
 
   try {
     await updateEquipment(equipment.id, { [field]: text || null });
     const updated = await findEquipmentById(equipment.id);
-    const markup  = buildEquipmentMarkup(updated, isAdmin(ctx));
+    const markup  = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
 
     await safeDelete(ctx, flow.sourceMessage,   'edit:source');
     await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
@@ -246,7 +258,7 @@ async function handleEditEquipment(ctx, text, flow) {
     await ctx.reply('Данные обновлены.');
     return ctx.reply(await renderEquipmentCard(updated), markup || mainMenu(ctx));
   } catch (err) {
-    logger.error('Update equipment error', { err: err.message });
+    logger.error({ err: err.message }, 'Update equipment error');
     resetFlow(ctx);
     return ctx.reply('Не удалось сохранить изменения.', mainMenu(ctx));
   }
@@ -254,7 +266,7 @@ async function handleEditEquipment(ctx, text, flow) {
 
 // ── Main FSM router ───────────────────────────────────────────────────────────
 function registerFlowHandlers(bot) {
-  bot.on('text', async (ctx, next) => {
+  bot.on('text', safe(async (ctx, next) => {
     const text = (ctx.message?.text || '').trim();
     if (text.startsWith('/')) return next();
     if (text.length > MAX_INPUT) return ctx.reply(`Слишком длинный текст. Максимум ${MAX_INPUT} символов.`);
@@ -276,7 +288,7 @@ function registerFlowHandlers(bot) {
         resetFlow(ctx);
         return next();
     }
-  });
+  }, 'flow:text'));
 }
 
 module.exports = { registerFlowHandlers };

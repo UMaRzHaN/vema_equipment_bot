@@ -29,13 +29,13 @@ function createApi(bot, webhookSecret) {
     httpRequestDuration.observe({ method, route, status }, duration);
     httpRequestsTotal.inc({ method, route, status });
 
-    logger.info('http', {
+    logger.info({
       method,
       url:    req.url,
       status: reply.statusCode,
       ms:     Math.round(duration * 1000),
       userId: req.headers['x-user-id'] || undefined,
-    });
+    }, 'http');
   });
 
   // Telegram Webhook
@@ -49,7 +49,7 @@ function createApi(bot, webhookSecret) {
     try {
       await bot.handleUpdate(req.body);
     } catch (err) {
-      logger.error('Webhook handle error', { err: err.message });
+      logger.error({ err: err.message }, 'Webhook handle error');
     }
     // Always return 200 to Telegram to prevent retries
     return reply.code(200).send({ ok: true });
@@ -63,11 +63,11 @@ function createApi(bot, webhookSecret) {
 
   // Global error handler
   fastify.setErrorHandler(async (err, req, reply) => {
-    logger.error('API error', {
+    logger.error({
       err: err.message,
       url: req.url,
       method: req.method,
-    });
+    }, 'API error');
     return reply.code(500).send({ error: 'Internal server error' });
   });
 

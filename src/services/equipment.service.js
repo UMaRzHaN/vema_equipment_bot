@@ -55,6 +55,7 @@ async function getEquipmentStats(items) {
   return stats;
 }
 
+
 async function addEquipment(data) {
   try {
     return await createEquipment({ ...data, status: STATUS.IN_STOCK });
@@ -74,42 +75,60 @@ async function removeEquipment(id) {
 }
 
 async function giveEquipmentToUser(equipment, userId) {
-  await atomicStatusChange(
-    { id: equipment.id, status: STATUS.WITH_USER, current_holder_user_id: userId, current_issue_date: new Date().toISOString() },
-    { equipment_id: equipment.id, action: 'выдано', from_status: STATUS.IN_STOCK, to_status: STATUS.WITH_USER, to_user_id: userId, performed_by_user_id: userId },
-  );
+  try {
+    await atomicStatusChange(
+      { id: equipment.id, status: STATUS.WITH_USER, current_holder_user_id: userId, current_issue_date: new Date().toISOString() },
+      { equipment_id: equipment.id, action: 'выдано', from_status: STATUS.IN_STOCK, to_status: STATUS.WITH_USER, to_user_id: userId, performed_by_user_id: userId },
+    );
+  } catch (err) {
+    if (err.code === 'STATUS_CONFLICT') throw Object.assign(new Error('Оборудование уже недоступно.'), { code: 'STATUS_CONFLICT' });
+    throw err;
+  }
   return findEquipmentById(equipment.id);
 }
 
+function wrapStatusConflict(err) {
+  if (err.code === 'STATUS_CONFLICT') return Object.assign(new Error('Статус оборудования изменился. Обновите карточку.'), { code: 'STATUS_CONFLICT' });
+  return err;
+}
+
 async function returnEquipmentFromUser(equipment, userId) {
-  await atomicStatusChange(
-    { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
-    { equipment_id: equipment.id, action: 'возвращено', from_status: STATUS.WITH_USER, to_status: STATUS.IN_STOCK, from_user_id: userId, performed_by_user_id: userId },
-  );
+  try {
+    await atomicStatusChange(
+      { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
+      { equipment_id: equipment.id, action: 'возвращено', from_status: STATUS.WITH_USER, to_status: STATUS.IN_STOCK, from_user_id: userId, performed_by_user_id: userId },
+    );
+  } catch (err) { throw wrapStatusConflict(err); }
   return findEquipmentById(equipment.id);
 }
 
 async function startRepair(equipment, performedByUserId, comment) {
-  await atomicStatusChange(
-    { id: equipment.id, status: STATUS.REPAIR, current_holder_user_id: null, current_issue_date: null },
-    { equipment_id: equipment.id, action: 'в ремонт', from_status: equipment.status, to_status: STATUS.REPAIR, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
-  );
+  try {
+    await atomicStatusChange(
+      { id: equipment.id, status: STATUS.REPAIR, current_holder_user_id: null, current_issue_date: null },
+      { equipment_id: equipment.id, action: 'в ремонт', from_status: equipment.status, to_status: STATUS.REPAIR, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
+    );
+  } catch (err) { throw wrapStatusConflict(err); }
   return findEquipmentById(equipment.id);
 }
 
 async function completeRepair(equipment, performedByUserId) {
-  await atomicStatusChange(
-    { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
-    { equipment_id: equipment.id, action: 'из ремонта', from_status: STATUS.REPAIR, to_status: STATUS.IN_STOCK, performed_by_user_id: performedByUserId },
-  );
+  try {
+    await atomicStatusChange(
+      { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
+      { equipment_id: equipment.id, action: 'из ремонта', from_status: STATUS.REPAIR, to_status: STATUS.IN_STOCK, performed_by_user_id: performedByUserId },
+    );
+  } catch (err) { throw wrapStatusConflict(err); }
   return findEquipmentById(equipment.id);
 }
 
 async function writeOffEquipment(equipment, performedByUserId, comment) {
-  await atomicStatusChange(
-    { id: equipment.id, status: STATUS.WRITTEN_OFF, current_holder_user_id: null, current_issue_date: null },
-    { equipment_id: equipment.id, action: 'списано', from_status: equipment.status, to_status: STATUS.WRITTEN_OFF, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
-  );
+  try {
+    await atomicStatusChange(
+      { id: equipment.id, status: STATUS.WRITTEN_OFF, current_holder_user_id: null, current_issue_date: null },
+      { equipment_id: equipment.id, action: 'списано', from_status: equipment.status, to_status: STATUS.WRITTEN_OFF, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
+    );
+  } catch (err) { throw wrapStatusConflict(err); }
   return findEquipmentById(equipment.id);
 }
 

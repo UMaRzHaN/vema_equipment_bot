@@ -50,7 +50,7 @@ async function shutdown(signal) {
     await closeDb();
     await closeRedis();
   } catch (err) {
-    logger.error('Shutdown error', { err: err.message });
+    logger.error({ err: err.message }, 'Shutdown error');
   }
   process.exit(0);
 }
@@ -59,6 +59,6 @@ process.once('SIGINT',  () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 
 main().catch((err) => {
-  logger.error('Startup error', { err: err.message, stack: err.stack });
+  logger.error({ err: err.message, stack: err.stack }, 'Startup error');
   process.exit(1);
 });

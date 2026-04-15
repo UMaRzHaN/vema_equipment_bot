@@ -23,7 +23,7 @@ function createRedisClient(overrides = {}) {
   const client = new Redis(opts);
 
   client.on('connect', () => logger.info('Redis connected'));
-  client.on('error', (err) => logger.error('Redis error', { err: err.message }));
+  client.on('error', (err) => logger.error({ err: err.message }, 'Redis error'));
   client.on('reconnecting', () => logger.warn('Redis reconnecting'));
 
   return client;

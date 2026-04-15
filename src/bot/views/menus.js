@@ -1,16 +1,47 @@
 'use strict';
 
 const { Markup } = require('telegraf');
-const { isAdmin } = require('../config');
+const { isEffectiveAdmin } = require('../config');
 const { LABELS } = require('../labels');
 
 const ITEMS_PER_PAGE = 8;
 
 function mainMenu(ctx) {
   const firstRow = [LABELS.categories];
-  if (isAdmin(ctx)) firstRow.push(LABELS.addEquipment);
-  return Markup.keyboard([firstRow, [LABELS.summary, LABELS.profile]]).resize();
+  if (isEffectiveAdmin(ctx)) firstRow.push(LABELS.addEquipment);
+  const secondRow = [LABELS.summary, LABELS.profile];
+  if (isEffectiveAdmin(ctx)) secondRow.push(LABELS.manageUsers);
+  return Markup.keyboard([firstRow, secondRow]).resize();
 }
+
+function buildUserListKeyboard(users, page, totalPages) {
+  const rows = users.map((u) => {
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || `#${u.telegram_user_id}`;
+    const roleTag = u.role === 'admin' ? '👑' : u.role === 'manager' ? '📋' : '👤';
+    return [Markup.button.callback(
+      `${roleTag} ${name}`,
+      `set_role_select_${u.telegram_user_id}`,
+    )];
+  });
+  const nav = [];
+  if (page > 0)              nav.push(Markup.button.callback('⬅️', `users_page_${page - 1}`));
+  nav.push(Markup.button.callback(`${page + 1}/${totalPages}`, 'noop'));
+  if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `users_page_${page + 1}`));
+  if (nav.length) rows.push(nav);
+  return Markup.inlineKeyboard(rows);
+}
+
+function buildRoleSelectKeyboard(telegramUserId) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('👤 user',    `set_role_${telegramUserId}_user`),
+      Markup.button.callback('📋 manager', `set_role_${telegramUserId}_manager`),
+      Markup.button.callback('👑 admin',   `set_role_${telegramUserId}_admin`),
+    ],
+    [Markup.button.callback('« Назад', `users_page_0`)],
+  ]);
+}
+
 
 function buildEditEquipmentKeyboard() {
   return Markup.keyboard([
@@ -80,5 +111,7 @@ module.exports = {
   buildCategoryListKeyboard,
   buildEditEquipmentKeyboard,
   buildPhoneRequestKeyboard,
+  buildRoleSelectKeyboard,
+  buildUserListKeyboard,
   mainMenu,
 };

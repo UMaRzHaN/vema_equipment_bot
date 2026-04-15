@@ -15,6 +15,7 @@ const LABELS = {
   editInventoryNumber: 'Инвентарный номер',
   editPurchaseDate:  'Дата покупки',
   editNotes:         'Примечания',
+  manageUsers:       '👥 Пользователи',
   sharePhone:        '📱 Поделиться номером',
   editProfileInline: '✏️ Редактировать профиль',
   fillProfileInline: '📝 Заполнить профиль',

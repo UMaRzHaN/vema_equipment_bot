@@ -42,4 +42,24 @@ async function updateUserProfile(telegramId, data) {
   );
 }
 
-module.exports = { findUserByTelegramId, upsertTelegramUser, updateUserProfile };
+async function setUserRole(telegramUserId, role) {
+  await query(
+    'UPDATE users SET role = $1 WHERE telegram_user_id = $2',
+    [role, telegramUserId],
+  );
+}
+
+async function getAllUsers({ limit = 20, offset = 0 } = {}) {
+  const result = await query(
+    'SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+    [limit, offset],
+  );
+  return result.rows;
+}
+
+async function countUsers() {
+  const result = await query('SELECT COUNT(*) AS cnt FROM users');
+  return Number(result.rows[0].cnt);
+}
+
+module.exports = { countUsers, findUserByTelegramId, getAllUsers, setUserRole, upsertTelegramUser, updateUserProfile };

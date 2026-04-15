@@ -4,6 +4,7 @@ const { ensureSession, resetFlow } = require('../utils');
 const { saveUser, getUserByTelegramId } = require('../../services/user.service');
 const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
+const { safe } = require('../middlewares/error.handler');
 
 function removeKeyboard() {
   return { reply_markup: { remove_keyboard: true } };
@@ -35,31 +36,31 @@ function isValidPhone(phone) {
 }
 
 function registerProfileHandlers(bot) {
-  bot.hears('✏️ Имя', (ctx) => {
+  bot.hears('✏️ Имя', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
     ctx.session.flow = { type: 'edit_profile', field: 'first_name', startedAt: Date.now(), version: 1 };
     return ctx.reply('Введите новое имя:', removeKeyboard());
-  });
+  }, 'profile:editName'));
 
-  bot.hears('✏️ Фамилия', (ctx) => {
+  bot.hears('✏️ Фамилия', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
     ctx.session.flow = { type: 'edit_profile', field: 'last_name', startedAt: Date.now(), version: 1 };
     return ctx.reply('Введите новую фамилию:', removeKeyboard());
-  });
+  }, 'profile:editLastName'));
 
-  bot.hears('📱 Телефон', (ctx) => {
+  bot.hears('📱 Телефон', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
     ctx.session.flow = { type: 'edit_profile', field: 'phone', startedAt: Date.now(), version: 1 };
     return ctx.reply('Введите номер или нажмите кнопку:', phoneKeyboard());
-  });
+  }, 'profile:editPhone'));
 
-  bot.hears('🏠 Главное меню', (ctx) => {
+  bot.hears('🏠 Главное меню', safe((ctx) => {
     resetFlow(ctx);
     return ctx.reply('Главное меню', mainMenu(ctx));
-  });
+  }, 'profile:mainMenu'));
 
   // ── TEXT ──────────────────────────────────────────────────────────────────
-  bot.on('text', async (ctx, next) => {
+  bot.on('text', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;
     if (!flow) return next();
@@ -111,10 +112,10 @@ function registerProfileHandlers(bot) {
     }
 
     return next();
-  });
+  }, 'profile:text'));
 
   // ── CONTACT ───────────────────────────────────────────────────────────────
-  bot.on('contact', async (ctx, next) => {
+  bot.on('contact', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;
     if (!flow) return next();
@@ -139,7 +140,7 @@ function registerProfileHandlers(bot) {
     }
 
     return next();
-  });
+  }, 'profile:contact'));
 }
 
 module.exports = { registerProfileHandlers, startProfileRegistration, renderProfileCard };
