@@ -1,6 +1,6 @@
 'use strict';
 
-const { countUsers, deleteUserByTelegramId, findUserByTelegramId, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
+const { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile } = require('../repositories/user.repo');
 
 async function saveTelegramUser(from) {
   return upsertTelegramUser(from);
@@ -23,6 +23,12 @@ async function saveUser({ telegramId, firstName, lastName, phone }) {
 
 async function getUserByTelegramId(telegramId) {
   return findUserByTelegramId(telegramId);
+}
+
+// Returns Map<telegramId, user> for batch lookups
+async function getUsersByTelegramIds(telegramIds) {
+  const users = await findUsersByTelegramIds(telegramIds);
+  return new Map(users.map((u) => [u.telegram_user_id, u]));
 }
 
 function isUserProfileComplete(user) {
@@ -56,4 +62,4 @@ async function deleteUserAccount(telegramUserId) {
   await deleteUserByTelegramId(telegramUserId);
 }
 
-module.exports = { assignUserRole, deleteUserAccount, formatUser, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged, saveTelegramUser, saveUser };
+module.exports = { assignUserRole, deleteUserAccount, formatUser, getUserByTelegramId, getUsersByTelegramIds, isUserProfileComplete, listAllUsersPaged, saveTelegramUser, saveUser };

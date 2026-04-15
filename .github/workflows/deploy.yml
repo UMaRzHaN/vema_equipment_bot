@@ -128,6 +128,19 @@ jobs:
 
             cd /opt/vema-bot
 
+            REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/vema-equipment-bot"
+
+            echo "=== Snapshot current image for rollback ==="
+            # Tag the running container's image as :previous so rollback has a real target.
+            # If no container is running yet (first deploy), this is a no-op.
+            PREV_IMAGE_ID=$(docker inspect vema-bot-prod --format='{{.Image}}' 2>/dev/null || true)
+            if [ -n "$PREV_IMAGE_ID" ]; then
+              docker tag "$PREV_IMAGE_ID" "${REGISTRY}:previous"
+              echo "Saved rollback image: $PREV_IMAGE_ID → ${REGISTRY}:previous"
+            else
+              echo "No running container found — skipping rollback snapshot"
+            fi
+
             echo "=== Pull latest code ==="
             git pull origin main
 
@@ -144,21 +157,31 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans app
 
             echo "=== Wait for readiness (30s timeout) ==="
+            READY=false
             for i in $(seq 1 30); do
               STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ready || true)
               if [ "$STATUS" = "200" ]; then
                 echo "✅ Service is ready (attempt $i)"
+                READY=true
                 break
-              fi
-              if [ $i -eq 30 ]; then
-                echo "❌ Service not ready after 30s — initiating rollback"
-                docker compose -f docker-compose.prod.yml stop app
-                docker compose -f docker-compose.prod.yml up -d --no-deps app
-                exit 1
               fi
               echo "Waiting... ($i/30, status=$STATUS)"
               sleep 1
             done
+
+            if [ "$READY" = "false" ]; then
+              echo "❌ Service not ready after 30s — initiating rollback to previous image"
+              if docker image inspect "${REGISTRY}:previous" &>/dev/null; then
+                # Retag :previous as :latest so docker compose picks it up on next up
+                docker tag "${REGISTRY}:previous" "${REGISTRY}:latest"
+                docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans app
+                echo "⏪ Rolled back to previous image — manual investigation required"
+              else
+                echo "⚠️  No rollback image available — stopping app to prevent bad traffic"
+                docker compose -f docker-compose.prod.yml stop app
+              fi
+              exit 1
+            fi
 
             echo "=== Final health check ==="
             curl -fsS http://localhost:3000/health || { echo "Health check failed"; exit 1; }

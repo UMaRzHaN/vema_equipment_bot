@@ -1,7 +1,6 @@
 'use strict';
 
-const { pool } = require('../../db');
-const { getDbCircuitBreaker } = require('../../db');
+const { query, getDbCircuitBreaker } = require('../../db');
 const { redis } = require('../../redis');
 
 /**
@@ -34,7 +33,7 @@ async function readyRoutes(fastify) {
     } else {
       try {
         const t0 = Date.now();
-        await pool.query('SELECT 1');
+        await query('SELECT 1');
         checks.postgres.status = 'ok';
         checks.postgres.latencyMs = Date.now() - t0;
       } catch (err) {

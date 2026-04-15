@@ -61,6 +61,43 @@ async function getLastRepairComment(equipmentId) {
   return result.rows[0]?.comment || null;
 }
 
+async function getEquipmentTimelinesBatch(equipmentIds) {
+  if (!equipmentIds.length) return new Map();
+  const result = await query(
+    `SELECT equipment_id,
+            MAX(CASE WHEN action = 'выдано'     THEN action_date END) AS last_issue_date,
+            MAX(CASE WHEN action = 'возвращено' THEN action_date END) AS last_return_date,
+            MAX(CASE WHEN action = 'из ремонта' THEN action_date END) AS last_repair_date
+     FROM history
+     WHERE equipment_id = ANY($1)
+       AND action IN ('выдано', 'возвращено', 'из ремонта')
+     GROUP BY equipment_id`,
+    [equipmentIds],
+  );
+  return new Map(
+    result.rows.map((r) => [
+      r.equipment_id,
+      {
+        lastIssueDate:  r.last_issue_date  || null,
+        lastReturnDate: r.last_return_date || null,
+        lastRepairDate: r.last_repair_date || null,
+      },
+    ]),
+  );
+}
+
+async function getLastRepairCommentsBatch(equipmentIds) {
+  if (!equipmentIds.length) return new Map();
+  const result = await query(
+    `SELECT DISTINCT ON (equipment_id) equipment_id, comment
+     FROM history
+     WHERE equipment_id = ANY($1) AND action = 'в ремонт'
+     ORDER BY equipment_id, action_date DESC`,
+    [equipmentIds],
+  );
+  return new Map(result.rows.map((r) => [r.equipment_id, r.comment || null]));
+}
+
 async function getOverdueEquipment(thresholdDays) {
   const result = await query(
     `SELECT e.id, e.category, e.brand, e.model,
@@ -78,7 +115,9 @@ async function getOverdueEquipment(thresholdDays) {
 module.exports = {
   addHistory,
   getEquipmentHistory,
+  getEquipmentTimelinesBatch,
   getLastActionDate,
   getLastRepairComment,
+  getLastRepairCommentsBatch,
   getOverdueEquipment,
 };

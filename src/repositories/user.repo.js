@@ -74,4 +74,13 @@ async function deleteUserByTelegramId(telegramId) {
   await query('DELETE FROM users WHERE telegram_user_id = $1', [telegramId]);
 }
 
-module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };
+async function findUsersByTelegramIds(ids) {
+  if (!ids.length) return [];
+  const result = await query(
+    'SELECT * FROM users WHERE telegram_user_id = ANY($1)',
+    [ids],
+  );
+  return result.rows;
+}
+
+module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };

@@ -2,28 +2,51 @@
 
 const {
   atomicStatusChange,
+  countEquipment,
   createEquipment,
   deleteEquipmentById,
   findEquipmentById,
   findEquipmentBySerial,
   getAllEquipment,
+  getDistinctCategories,
+  getEquipmentByCategoryName,
+  getEquipmentPage,
   updateEquipmentDetails,
 } = require('../repositories/equipment.repo');
 const { STATUS } = require('../utils/constants');
+
+// 60-second in-process cache — avoids a full table scan on every catchAll message
+const _catCache = { value: null, expiresAt: 0 };
+const CATEGORIES_TTL_MS = 60_000;
+
+function invalidateCategoriesCache() {
+  _catCache.value = null;
+}
 
 async function listAllEquipment() {
   return getAllEquipment();
 }
 
+async function listEquipmentPaged({ page = 0, limit = 20 } = {}) {
+  const offset = page * limit;
+  const [items, total] = await Promise.all([
+    getEquipmentPage(limit, offset),
+    countEquipment(),
+  ]);
+  return { items, total, page, limit, totalPages: Math.max(Math.ceil(total / limit), 1) };
+}
+
 async function listCategories() {
-  const items = await listAllEquipment();
-  const set = new Set(items.map((item) => item.category || 'Без категории'));
-  return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
+  const now = Date.now();
+  if (_catCache.value && now < _catCache.expiresAt) return _catCache.value;
+  const cats = await getDistinctCategories();
+  _catCache.value    = cats;
+  _catCache.expiresAt = now + CATEGORIES_TTL_MS;
+  return cats;
 }
 
 async function listEquipmentByCategory(categoryName) {
-  const items = await listAllEquipment();
-  return items.filter((item) => (item.category || 'Без категории') === categoryName);
+  return getEquipmentByCategoryName(categoryName);
 }
 
 async function getEquipmentStats(items) {
@@ -58,7 +81,9 @@ async function getEquipmentStats(items) {
 
 async function addEquipment(data) {
   try {
-    return await createEquipment({ ...data, status: STATUS.IN_STOCK });
+    const result = await createEquipment({ ...data, status: STATUS.IN_STOCK });
+    invalidateCategoriesCache();
+    return result;
   } catch (err) {
     if (err.message && err.code === '23505') throw new Error('DUPLICATE_SERIAL');
     throw err;
@@ -67,11 +92,13 @@ async function addEquipment(data) {
 
 async function updateEquipment(id, data) {
   await updateEquipmentDetails({ id, ...data });
+  if (data.category !== undefined) invalidateCategoriesCache();
   return findEquipmentById(id);
 }
 
 async function removeEquipment(id) {
   await deleteEquipmentById(id);
+  invalidateCategoriesCache();
 }
 
 async function giveEquipmentToUser(equipment, userId) {
@@ -140,9 +167,11 @@ module.exports = {
   findEquipmentBySerial,
   getEquipmentStats,
   giveEquipmentToUser,
+  invalidateCategoriesCache,
   listAllEquipment,
   listCategories,
   listEquipmentByCategory,
+  listEquipmentPaged,
   removeEquipment,
   returnEquipmentFromUser,
   startRepair,

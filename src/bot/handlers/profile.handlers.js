@@ -2,6 +2,8 @@
 
 const { Markup } = require('telegraf');
 const { ensureSession, resetFlow } = require('../utils');
+const { makeFlow } = require('../fsm/session.schema');
+const { FLOW_TYPE } = require('../fsm/states');
 const { deleteUserAccount, saveUser, getUserByTelegramId } = require('../../services/user.service');
 const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
@@ -39,19 +41,19 @@ function isValidPhone(phone) {
 function registerProfileHandlers(bot) {
   bot.hears('✏️ Имя', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
-    ctx.session.flow = { type: 'edit_profile', field: 'first_name', startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'first_name' });
     return ctx.reply('Введите новое имя:', removeKeyboard());
   }, 'profile:editName'));
 
   bot.hears('✏️ Фамилия', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
-    ctx.session.flow = { type: 'edit_profile', field: 'last_name', startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'last_name' });
     return ctx.reply('Введите новую фамилию:', removeKeyboard());
   }, 'profile:editLastName'));
 
   bot.hears('📱 Телефон', safe((ctx) => {
     ensureSession(ctx); resetFlow(ctx);
-    ctx.session.flow = { type: 'edit_profile', field: 'phone', startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'phone' });
     return ctx.reply('Введите номер или нажмите кнопку:', phoneKeyboard());
   }, 'profile:editPhone'));
 

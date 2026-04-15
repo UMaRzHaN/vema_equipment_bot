@@ -68,9 +68,10 @@ const config = {
     database:                env.POSTGRES_DB,
     user:                    env.POSTGRES_USER,
     password:                env.POSTGRES_PASSWORD,
-    max:                     10,
+    max:                     20,
     idleTimeoutMillis:       30_000,
     connectionTimeoutMillis: 5_000,
+    statement_timeout:       30_000, // 30s hard cap — prevents slow queries from holding connections
   },
 
   redis: {
@@ -115,13 +116,7 @@ function assertConfig() {
     throw new Error('WEBHOOK_SECRET must be set in production (use: openssl rand -hex 32)');
   }
   if (!config.apiKey && config.nodeEnv === 'production') {
-    process.stderr.write(
-      JSON.stringify({
-        ts:    new Date().toISOString(),
-        level: 'warn',
-        msg:   'API_KEY not set — REST API endpoints are publicly accessible',
-      }) + '\n',
-    );
+    throw new Error('API_KEY must be set in production — REST API is publicly exposed without it');
   }
 }
 

@@ -5,6 +5,8 @@ const logger = require('../../utils/logger');
 const { isAdmin, isEffectiveAdmin } = require('../config');
 const { safe } = require('../middlewares/error.handler');
 const { ensureSession, resetFlow } = require('../utils');
+const { makeFlow } = require('../fsm/session.schema');
+const { FLOW_TYPE, ADD_STEP } = require('../fsm/states');
 const { listCategories, listEquipmentByCategory } = require('../../services/equipment.service');
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
 const { assignUserRole, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged } = require('../../services/user.service');
@@ -80,7 +82,7 @@ function registerNavigationHandlers(bot) {
     if (!isEffectiveAdmin(ctx)) return ctx.reply('Только администратор может добавлять оборудование.', mainMenu(ctx));
     resetFlow(ctx);
     ensureSession(ctx);
-    ctx.session.flow = { type: 'add_equipment', step: 1, data: {}, startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.CATEGORY);
     return ctx.reply('Введите категорию оборудования:');
   }, 'addEquipment'));
 

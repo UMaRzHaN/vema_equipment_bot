@@ -2,8 +2,10 @@
 
 const {
   getEquipmentHistory,
+  getEquipmentTimelinesBatch,
   getLastActionDate,
   getLastRepairComment,
+  getLastRepairCommentsBatch,
   getOverdueEquipment,
 } = require('../repositories/history.repo');
 
@@ -27,6 +29,8 @@ async function findOverdueEquipment(thresholdDays = 7) {
 module.exports = {
   findOverdueEquipment,
   getEquipmentTimeline,
+  getEquipmentTimelinesBatch,
   getFullEquipmentHistory,
   getLastRepairComment,
+  getLastRepairCommentsBatch,
 };

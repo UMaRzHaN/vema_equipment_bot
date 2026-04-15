@@ -17,7 +17,11 @@
       "Bash(node --check src/services/user.service.js)",
       "Bash(node --check src/bot/utils/profile.utils.js)",
       "Bash(node --check src/bot/handlers/profile.handlers.js)",
-      "Bash(node --check src/bot/handlers/navigation.handlers.js)"
+      "Bash(node --check src/bot/handlers/navigation.handlers.js)",
+      "Read(//c/Users/Windows 10/.claude/projects/c--Users-Windows-10-Documents-GitHub-vema-equipment-bot/memory/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Windows 10\\.claude\\projects\\c--Users-Windows-10-Documents-GitHub-vema-equipment-bot\\memory"
     ]
   }
 }

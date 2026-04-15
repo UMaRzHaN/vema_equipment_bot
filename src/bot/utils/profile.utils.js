@@ -1,6 +1,8 @@
 'use strict';
 
 const { ensureSession, resetFlow } = require('../utils');
+const { makeFlow } = require('../fsm/session.schema');
+const { FLOW_TYPE } = require('../fsm/states');
 const { getUserByTelegramId } = require('../../services/user.service');
 
 const ROLE_LABELS = {
@@ -35,7 +37,7 @@ function startProfileRegistration(ctx, text = 'Для начала подели�
   if (ctx.session.flow?.type === 'register_profile') return;
 
   resetFlow(ctx);
-  ctx.session.flow = { type: 'register_profile', step: 1, data: {}, startedAt: Date.now(), version: 1 };
+  ctx.session.flow = makeFlow(FLOW_TYPE.REGISTER_PROFILE, 1);
 
   return ctx.reply(text, {
     reply_markup: {

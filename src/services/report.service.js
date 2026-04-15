@@ -6,8 +6,8 @@ const path = require('path');
 const PImage = require('pureimage');
 const { Writable } = require('stream');
 const { getEquipmentStats, listAllEquipment } = require('./equipment.service');
-const { getEquipmentTimeline, getLastRepairComment } = require('./history.service');
-const { formatUser, getUserByTelegramId } = require('./user.service');
+const { getEquipmentTimelinesBatch, getLastRepairCommentsBatch } = require('./history.service');
+const { formatUser, getUsersByTelegramIds } = require('./user.service');
 const { escapeHtml, formatDate, padString, statusLabel } = require('../utils/formatters');
 
 async function buildSummaryText() {
@@ -85,14 +85,25 @@ async function createCategoryImage(categoryName, items) {
   let x = padding;
   for (const col of columns) { ctx.fillText(col.title, x + 4, padding + 24); x += col.width; }
 
+  // Batch-fetch all timeline, comment, and user data — 3 parallel queries total
+  const ids       = items.map((i) => i.id);
+  const holderIds = [...new Set(items.map((i) => i.current_holder_user_id).filter(Boolean))];
+  const EMPTY_TIMELINE = { lastIssueDate: null, lastReturnDate: null, lastRepairDate: null };
+
+  const [timelinesMap, commentsMap, usersMap] = await Promise.all([
+    getEquipmentTimelinesBatch(ids),
+    getLastRepairCommentsBatch(ids),
+    getUsersByTelegramIds(holderIds),
+  ]);
+
   let y = padding + rowHeight;
   for (const item of items) {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(padding, y, width - padding * 2, rowHeight);
     ctx.fillStyle = '#000000'; ctx.font = '16pt ReportFont';
 
-    const timeline = await getEquipmentTimeline(item.id);
+    const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
     const holder   = item.current_holder_user_id
-      ? formatUser(await getUserByTelegramId(item.current_holder_user_id))
+      ? formatUser(usersMap.get(item.current_holder_user_id))
       : '-';
 
     const rowVals = [
@@ -103,7 +114,7 @@ async function createCategoryImage(categoryName, items) {
       formatDate(item.current_issue_date),
       formatDate(timeline.lastReturnDate),
       formatDate(timeline.lastRepairDate),
-      (await getLastRepairComment(item.id)) || '-',
+      commentsMap.get(item.id) || '-',
     ];
 
     x = padding;
@@ -148,10 +159,21 @@ async function buildCategoryXlsx(categoryName, items) {
     { header: 'Комментарий',    key: 'repair_comment',        width: 30 },
   ];
 
+  // Batch-fetch all timeline, comment, and user data — 3 parallel queries total
+  const ids       = items.map((i) => i.id);
+  const holderIds = [...new Set(items.map((i) => i.current_holder_user_id).filter(Boolean))];
+  const EMPTY_TIMELINE = { lastIssueDate: null, lastReturnDate: null, lastRepairDate: null };
+
+  const [timelinesMap, commentsMap, usersMap] = await Promise.all([
+    getEquipmentTimelinesBatch(ids),
+    getLastRepairCommentsBatch(ids),
+    getUsersByTelegramIds(holderIds),
+  ]);
+
   for (const item of items) {
-    const timeline = await getEquipmentTimeline(item.id);
+    const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
     const holder   = item.current_holder_user_id
-      ? formatUser(await getUserByTelegramId(item.current_holder_user_id))
+      ? formatUser(usersMap.get(item.current_holder_user_id))
       : '';
     sheet.addRow({
       inventory_number:   item.inventory_number || '',
@@ -164,7 +186,7 @@ async function buildCategoryXlsx(categoryName, items) {
       current_issue_date: formatDate(item.current_issue_date),
       last_return_date:   formatDate(timeline.lastReturnDate),
       last_repair_date:   formatDate(timeline.lastRepairDate),
-      repair_comment:     (await getLastRepairComment(item.id)) || '',
+      repair_comment:     commentsMap.get(item.id) || '',
     });
   }
 

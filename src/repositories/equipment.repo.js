@@ -54,6 +54,45 @@ async function getAllEquipment() {
   return result.rows;
 }
 
+async function getEquipmentPage(limit, offset) {
+  const result = await query(
+    `SELECT e.*,
+            u.first_name, u.last_name, u.username
+     FROM equipment e
+     LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
+     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return result.rows;
+}
+
+async function countEquipment() {
+  const result = await query('SELECT COUNT(*) AS cnt FROM equipment');
+  return Number(result.rows[0].cnt);
+}
+
+async function getDistinctCategories() {
+  const result = await query(
+    `SELECT DISTINCT COALESCE(NULLIF(category, ''), 'Без категории') AS category
+     FROM equipment
+     ORDER BY category`,
+  );
+  return result.rows.map((r) => r.category);
+}
+
+async function getEquipmentByCategoryName(categoryName) {
+  const result = await query(
+    `SELECT e.*, u.first_name, u.last_name, u.username
+     FROM equipment e
+     LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
+     WHERE COALESCE(NULLIF(e.category, ''), 'Без категории') = $1
+     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC`,
+    [categoryName],
+  );
+  return result.rows;
+}
+
 
 async function searchEquipment(searchQuery) {
   if (!searchQuery || searchQuery.trim().length < 2) return [];
@@ -221,11 +260,15 @@ async function getSuggestionsForField(field, category = null) {
 
 module.exports = {
   atomicStatusChange,
+  countEquipment,
   createEquipment,
   deleteEquipmentById,
   findEquipmentById,
   findEquipmentBySerial,
   getAllEquipment,
+  getDistinctCategories,
+  getEquipmentByCategoryName,
+  getEquipmentPage,
   getEquipmentStats,
   getSuggestionsForField,
   searchEquipment,

@@ -7,6 +7,8 @@ const { safe } = require('../middlewares/error.handler');
 const { buildEditEquipmentKeyboard, mainMenu } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession } = require('../utils');
+const { makeFlow } = require('../fsm/session.schema');
+const { FLOW_TYPE, EDIT_STEP } = require('../fsm/states');
 const { formatDate, statusLabel } = require('../../utils/formatters');
 const { getUserByTelegramId, formatUser } = require('../../services/user.service');
 const { getFullEquipmentHistory } = require('../../services/history.service');
@@ -151,7 +153,7 @@ function registerEquipmentHandlers(bot) {
     if (!item) return ctx.reply('Оборудование не найдено.');
     if (item.status === STATUS.REPAIR) return ctx.reply('Оборудование уже в ремонте.');
     ensureSession(ctx);
-    ctx.session.flow = { type: 'repair', equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message), startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.REPAIR, 1, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
     const prompt = await ctx.reply('Введите причину ремонта:');
     ctx.session.flow.promptMessage = rememberMessage(prompt);
   }, 'repair'));
@@ -186,7 +188,7 @@ function registerEquipmentHandlers(bot) {
     if (!item) return ctx.editMessageText('Оборудование не найдено.');
     if (item.status === STATUS.WRITTEN_OFF) return ctx.editMessageText('Уже списано.');
     ensureSession(ctx);
-    ctx.session.flow = { type: 'writeoff', equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message), startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.WRITEOFF, 1, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
     const prompt = await ctx.reply('Введите причину списания (или отправьте — чтобы пропустить):');
     ctx.session.flow.promptMessage = rememberMessage(prompt);
   }, 'writeoff'));
@@ -200,7 +202,7 @@ function registerEquipmentHandlers(bot) {
     const item = await findEquipmentById(id);
     if (!item) return ctx.editMessageText('Оборудование не найдено.');
     ensureSession(ctx);
-    ctx.session.flow = { type: 'edit_equipment', step: 1, equipmentId: id, data: {}, sourceMessage: rememberMessage(ctx.callbackQuery?.message), startedAt: Date.now(), version: 1 };
+    ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_EQUIPMENT, EDIT_STEP.SELECT_FIELD, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
     const sel = await ctx.reply('Выберите поле для редактирования:', buildEditEquipmentKeyboard());
     ctx.session.flow.selectorMessage = rememberMessage(sel);
   }, 'edit'));

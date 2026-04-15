@@ -1,10 +1,15 @@
 'use strict';
 
 const pino = require('pino');
-const { config } = require('../config');
+
+// Read directly from env — avoids importing config (which validates the full
+// env schema and calls process.exit). Logger must be safe to require in tests
+// that run without POSTGRES_PASSWORD set.
+const _level   = process.env.LOG_LEVEL   || 'info';
+const _nodeEnv = process.env.NODE_ENV    || 'production';
 
 const transport =
-  config.nodeEnv === 'development'
+  _nodeEnv === 'development'
     ? pino.transport({
         target:  'pino-pretty',
         options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid' },
@@ -18,7 +23,7 @@ const transport =
  */
 const logger = pino(
   {
-    level: config.log.level,
+    level: _level,
     base:  { pid: process.pid, service: 'vema-equipment-bot' },
     timestamp: pino.stdTimeFunctions.isoTime,
     formatters: {

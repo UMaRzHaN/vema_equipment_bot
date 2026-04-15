@@ -26,12 +26,13 @@ function isFlowExpired(session, ttlMs = 30 * 60 * 1000) {
 /**
  * Creates a new flow object with the current timestamp.
  * Always use this instead of manually setting ctx.session.flow = {...}
- * @param {string} type  FLOW_TYPE constant
- * @param {number} step  Initial step number
- * @param {object} [data]  Accumulated flow data
+ * @param {string} type   FLOW_TYPE constant
+ * @param {number} step   Initial step number
+ * @param {object} [data] Accumulated flow data
+ * @param {object} [extra] Extra flow-specific fields (equipmentId, sourceMessage, field, …)
  */
-function makeFlow(type, step, data = {}) {
-  return { type, step, data, startedAt: Date.now(), version: 1 };
+function makeFlow(type, step, data = {}, extra = {}) {
+  return { type, step, data, startedAt: Date.now(), version: 1, ...extra };
 }
 
 module.exports = { defaultSession, isFlowExpired, makeFlow };
