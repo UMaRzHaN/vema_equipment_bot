@@ -25,11 +25,17 @@ const {
 const { equipmentActionsTotal } = require('../../utils/metrics');
 
 const MAX_INPUT = 500;
-const DATE_RE   = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_RE   = /^\d{2}\.\d{2}\.\d{4}$/;
 
 function isValidDate(v) {
   if (!DATE_RE.test(v)) return false;
-  return !Number.isNaN(new Date(v).getTime());
+  const [d, m, y] = v.split('.').map(Number);
+  return !Number.isNaN(new Date(y, m - 1, d).getTime());
+}
+
+function parseDMY(v) {
+  const [d, m, y] = v.split('.').map(Number);
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 function stepLabel(step) {
@@ -67,7 +73,7 @@ async function sendAddPrompt(ctx, step) {
     case ADD_STEP.INVENTORY:
       return ctx.reply(`${stepLabel(step)} Введите инвентарный номер (или оставьте пустым):`, buildBackKeyboard());
     case ADD_STEP.PURCHASE_DATE: {
-      const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (YYYY-MM-DD) или оставьте пустым:`, category);
+      const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (ДД.ММ.ГГГГ) или оставьте пустым:`, category);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
     }
     case ADD_STEP.NOTES:
@@ -127,8 +133,8 @@ async function handleAddEquipment(ctx, text, flow) {
 
     case ADD_STEP.PURCHASE_DATE: {
       const dateVal = normalizeOptionalValue(text);
-      if (dateVal && !isValidDate(dateVal)) return ctx.reply('Неверный формат даты. Используйте YYYY-MM-DD или оставьте пустым:');
-      data.purchase_date = dateVal;
+      if (dateVal && !isValidDate(dateVal)) return ctx.reply('Неверный формат даты. Используйте ДД.ММ.ГГГГ или оставьте пустым:');
+      data.purchase_date = dateVal ? parseDMY(dateVal) : null;
       ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.NOTES, data);
       return sendAddPrompt(ctx, ADD_STEP.NOTES);
     }
@@ -212,7 +218,8 @@ async function handleEditEquipment(ctx, text, flow) {
     const field = EDITABLE_FIELDS[text];
     if (!field) return ctx.reply('Пожалуйста, выберите поле из списка или нажмите 🔙 Назад.');
 
-    const promptMsg = await ctx.reply(`Введите новое значение для ${text}:`, buildBackKeyboard());
+    const promptSuffix = field === 'purchase_date' ? ' (ДД.ММ.ГГГГ)' : '';
+    const promptMsg = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());
     ctx.session.flow = {
       type: FLOW_TYPE.EDIT_EQUIPMENT,
       step: EDIT_STEP.ENTER_VALUE,
@@ -237,8 +244,14 @@ async function handleEditEquipment(ctx, text, flow) {
 
   const { field } = flow.data;
 
+  let inputValue = text || null;
+  if (field === 'purchase_date' && inputValue) {
+    if (!isValidDate(inputValue)) return ctx.reply('Неверный формат даты. Используйте ДД.ММ.ГГГГ:');
+    inputValue = parseDMY(inputValue);
+  }
+
   // Validate via Zod before touching the DB
-  const valResult = validateEquipmentUpdate({ [field]: text || null });
+  const valResult = validateEquipmentUpdate({ [field]: inputValue });
   if (!valResult.success) return ctx.reply(`Неверное значение: ${valResult.error.errors[0]?.message}`);
 
   if (field === 'serial_number') {
@@ -247,7 +260,7 @@ async function handleEditEquipment(ctx, text, flow) {
   }
 
   try {
-    await updateEquipment(equipment.id, { [field]: text || null });
+    await updateEquipment(equipment.id, { [field]: inputValue });
     const updated = await findEquipmentById(equipment.id);
     const markup  = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
 
