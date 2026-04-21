@@ -6,7 +6,8 @@
       "Bash(docker info:*)",
       "Bash(npm start:*)",
       "Bash(pg_isready -h localhost -p 5432)",
-      "Bash(redis-cli -h localhost ping)"
+      "Bash(redis-cli -h localhost ping)",
+      "WebFetch(domain:claude.ai)"
     ]
   }
 }
