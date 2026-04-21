@@ -3,7 +3,7 @@
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { CircuitBreaker, CircuitOpenError, STATE } = require('../src/lib/circuit-breaker');
-
+// !!!!!
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const success = () => Promise.resolve('ok');
 const fail    = (msg = 'error') => Promise.reject(new Error(msg));
