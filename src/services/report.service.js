@@ -24,7 +24,9 @@ async function buildSummaryText() {
 }
 
 function findSystemFontPath() {
-  const candidates = [];
+  const candidates = [
+    path.join(__dirname, '../../assets/fonts/DejaVuSans.ttf'),
+  ];
   if (process.platform === 'win32') {
     const winDir = process.env.WINDIR || process.env.SYSTEMROOT;
     if (winDir) {
