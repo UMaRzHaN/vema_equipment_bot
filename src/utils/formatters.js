@@ -12,6 +12,17 @@ function formatDate(value) {
   });
 }
 
+function formatDateOnly(value) {
+  if (!value) return '-';
+  // date-only strings (YYYY-MM-DD) must be parsed as local date to avoid UTC shift
+  const str = String(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(str)
+    ? new Date(`${str}T00:00:00`)
+    : new Date(str);
+  if (Number.isNaN(dateOnly.getTime())) return str;
+  return dateOnly.toLocaleString('ru-RU', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
 function statusLabel(status) {
   switch (status) {
     case STATUS.IN_STOCK:    return 'На складе';
@@ -40,4 +51,4 @@ function csvEscape(value) {
   return /[",\n]/.test(text) ? `"${text}"` : text;
 }
 
-module.exports = { csvEscape, escapeHtml, formatDate, padString, statusLabel };
+module.exports = { csvEscape, escapeHtml, formatDate, formatDateOnly, padString, statusLabel };

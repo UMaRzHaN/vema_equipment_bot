@@ -8,7 +8,7 @@ const { Writable } = require('stream');
 const { getEquipmentStats, listAllEquipment } = require('./equipment.service');
 const { getEquipmentTimelinesBatch, getLastRepairCommentsBatch } = require('./history.service');
 const { formatUser, getUsersByTelegramIds } = require('./user.service');
-const { escapeHtml, formatDate, padString, statusLabel } = require('../utils/formatters');
+const { escapeHtml, formatDate, formatDateOnly, padString, statusLabel } = require('../utils/formatters');
 
 async function buildSummaryText() {
   const items = await listAllEquipment();
@@ -187,7 +187,7 @@ async function buildCategoryXlsx(categoryName, items) {
       brand:              item.brand || '',
       model:              item.model || '',
       serial_number:      item.serial_number || '',
-      purchase_date:      formatDate(item.purchase_date),
+      purchase_date:      formatDateOnly(item.purchase_date),
       status:             statusLabel(item.status),
       holder,
       current_issue_date: formatDate(item.current_issue_date),
