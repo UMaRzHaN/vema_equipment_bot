@@ -100,7 +100,8 @@ async function createCategoryImage(categoryName, items) {
   ]);
 
   let y = padding + rowHeight;
-  for (const item of items) {
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
     ctx.fillStyle = '#ffffff'; ctx.fillRect(padding, y, width - padding * 2, rowHeight);
     ctx.fillStyle = '#000000'; ctx.font = '16pt ReportFont';
 
@@ -110,7 +111,7 @@ async function createCategoryImage(categoryName, items) {
       : '-';
 
     const rowVals = [
-      item.inventory_number || '-',
+      String(idx + 1),
       `${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
       statusLabel(item.status),
       holder,
@@ -149,17 +150,18 @@ async function buildCategoryXlsx(categoryName, items) {
   const sheet    = workbook.addWorksheet(String(categoryName).slice(0, 31));
 
   sheet.columns = [
-    { header: 'Инв. номер',     key: 'inventory_number',      width: 15 },
-    { header: 'Категория',      key: 'category',              width: 20 },
-    { header: 'Бренд',          key: 'brand',                 width: 24 },
-    { header: 'Модель',         key: 'model',                 width: 18 },
-    { header: 'Серийный номер', key: 'serial_number',         width: 18 },
-    { header: 'Статус',         key: 'status',                width: 14 },
-    { header: 'Пользователь',   key: 'holder',                width: 18 },
-    { header: 'Дата выдачи',    key: 'current_issue_date',    width: 20 },
-    { header: 'Дата сдачи',     key: 'last_return_date',      width: 20 },
-    { header: 'Дата ремонта',   key: 'last_repair_date',      width: 20 },
-    { header: 'Комментарий',    key: 'repair_comment',        width: 30 },
+    { header: 'Инв. номер',      key: 'inventory_number',      width: 15 },
+    { header: 'Категория',       key: 'category',              width: 20 },
+    { header: 'Бренд',           key: 'brand',                 width: 24 },
+    { header: 'Модель',          key: 'model',                 width: 18 },
+    { header: 'Серийный номер',  key: 'serial_number',         width: 18 },
+    { header: 'Дата покупки',    key: 'purchase_date',         width: 18 },
+    { header: 'Статус',          key: 'status',                width: 14 },
+    { header: 'Пользователь',    key: 'holder',                width: 18 },
+    { header: 'Дата выдачи',     key: 'current_issue_date',    width: 20 },
+    { header: 'Дата сдачи',      key: 'last_return_date',      width: 20 },
+    { header: 'Дата ремонта',    key: 'last_repair_date',      width: 20 },
+    { header: 'Комментарий',     key: 'repair_comment',        width: 30 },
   ];
 
   // Batch-fetch all timeline, comment, and user data — 3 parallel queries total
@@ -173,17 +175,19 @@ async function buildCategoryXlsx(categoryName, items) {
     getUsersByTelegramIds(holderIds),
   ]);
 
-  for (const item of items) {
+  for (let idx = 0; idx < items.length; idx++) {
+    const item     = items[idx];
     const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
     const holder   = item.current_holder_user_id
       ? formatUser(usersMap.get(item.current_holder_user_id))
       : '';
     sheet.addRow({
-      inventory_number:   item.inventory_number || '',
+      inventory_number:   idx + 1,
       category:           item.category || '',
       brand:              item.brand || '',
       model:              item.model || '',
       serial_number:      item.serial_number || '',
+      purchase_date:      formatDate(item.purchase_date),
       status:             statusLabel(item.status),
       holder,
       current_issue_date: formatDate(item.current_issue_date),

@@ -94,6 +94,7 @@ async function getEquipmentByCategoryName(categoryName) {
 }
 
 
+
 async function searchEquipment(searchQuery) {
   if (!searchQuery || searchQuery.trim().length < 2) return [];
   const term = searchQuery.trim();

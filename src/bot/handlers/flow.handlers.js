@@ -70,8 +70,6 @@ async function sendAddPrompt(ctx, step) {
     }
     case ADD_STEP.SERIAL:
       return ctx.reply(`${stepLabel(step)} Введите серийный номер:`, buildBackKeyboard());
-    case ADD_STEP.INVENTORY:
-      return ctx.reply(`${stepLabel(step)} Введите инвентарный номер (или оставьте пустым):`, buildBackKeyboard());
     case ADD_STEP.PURCHASE_DATE: {
       const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (ДД.ММ.ГГГГ) или оставьте пустым:`, category);
       return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
@@ -123,11 +121,6 @@ async function handleAddEquipment(ctx, text, flow) {
         return ctx.reply('Оборудование с таким серийным номером уже существует. Введите другой:');
       }
       data.serial_number = text;
-      ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.INVENTORY, data);
-      return sendAddPrompt(ctx, ADD_STEP.INVENTORY);
-
-    case ADD_STEP.INVENTORY:
-      data.inventory_number = normalizeOptionalValue(text);
       ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.PURCHASE_DATE, data);
       return sendAddPrompt(ctx, ADD_STEP.PURCHASE_DATE);
 

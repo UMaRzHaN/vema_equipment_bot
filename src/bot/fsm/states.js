@@ -16,9 +16,8 @@ const ADD_STEP = Object.freeze({
   BRAND:         2,
   MODEL:         3,
   SERIAL:        4,
-  INVENTORY:     5,
-  PURCHASE_DATE: 6,
-  NOTES:         7,
+  PURCHASE_DATE: 5,
+  NOTES:         6,
 });
 
 const TOTAL_ADD_STEPS = Object.keys(ADD_STEP).length; // 7
