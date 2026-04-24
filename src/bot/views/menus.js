@@ -80,7 +80,7 @@ function buildCategoryItemsKeyboard(items, page = 0) {
 
   const rows = pageItems.map((item) => [
     Markup.button.callback(
-      `${item.inventory_number || item.id}. ${item.model || '-'} - ${item.serial_number || '-'}`,
+      `${item.position || item.id}. ${item.model || '-'} - ${item.serial_number || '-'}`,
       `open_${item.id}`,
     ),
   ]);

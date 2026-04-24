@@ -51,7 +51,7 @@ async function renderEquipmentCard(item) {
   const repairComment = await getLastRepairComment(item.id);
   const commentLine   = repairComment ? `Комментарий к ремонту: ${repairComment}\n` : '';
 
-  return `#${item.inventory_number || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
+  return `#${item.position || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
 
 Статус: ${statusLabel(item.status)}
 Пользователь: ${user}

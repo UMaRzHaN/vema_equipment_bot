@@ -25,11 +25,14 @@ async function createEquipment(data) {
 
 async function findEquipmentById(id) {
   const result = await query(
-    `SELECT e.*,
-            u.first_name, u.last_name, u.username
-     FROM equipment e
-     LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
-     WHERE e.id = $1`,
+    `SELECT * FROM (
+       SELECT e.*,
+              u.first_name, u.last_name, u.username,
+              ROW_NUMBER() OVER (PARTITION BY e.category ORDER BY e.id ASC) AS position
+       FROM equipment e
+       LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
+     ) sub
+     WHERE sub.id = $1`,
     [id],
   );
   return result.rows[0] || null;
@@ -46,10 +49,11 @@ async function findEquipmentBySerial(serialNumber) {
 async function getAllEquipment() {
   const result = await query(
     `SELECT e.*,
-            u.first_name, u.last_name, u.username
+            u.first_name, u.last_name, u.username,
+            ROW_NUMBER() OVER (PARTITION BY e.category ORDER BY e.id ASC) AS position
      FROM equipment e
      LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
-     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC`,
+     ORDER BY e.category ASC, e.id ASC`,
   );
   return result.rows;
 }
@@ -57,10 +61,11 @@ async function getAllEquipment() {
 async function getEquipmentPage(limit, offset) {
   const result = await query(
     `SELECT e.*,
-            u.first_name, u.last_name, u.username
+            u.first_name, u.last_name, u.username,
+            ROW_NUMBER() OVER (PARTITION BY e.category ORDER BY e.id ASC) AS position
      FROM equipment e
      LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
-     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC
+     ORDER BY e.category ASC, e.id ASC
      LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
@@ -83,11 +88,12 @@ async function getDistinctCategories() {
 
 async function getEquipmentByCategoryName(categoryName) {
   const result = await query(
-    `SELECT e.*, u.first_name, u.last_name, u.username
+    `SELECT e.*, u.first_name, u.last_name, u.username,
+            ROW_NUMBER() OVER (PARTITION BY e.category ORDER BY e.id ASC) AS position
      FROM equipment e
      LEFT JOIN users u ON u.telegram_user_id = e.current_holder_user_id
      WHERE COALESCE(NULLIF(e.category, ''), 'Без категории') = $1
-     ORDER BY e.inventory_number ASC NULLS LAST, e.id ASC`,
+     ORDER BY e.id ASC`,
     [categoryName],
   );
   return result.rows;
@@ -102,12 +108,12 @@ async function searchEquipment(searchQuery) {
   const result = await query(
     `SELECT e.*,
             u.first_name, u.last_name, u.username,
+            ROW_NUMBER() OVER (PARTITION BY e.category ORDER BY e.id ASC) AS position,
             similarity(
               coalesce(e.category,'') || ' ' ||
               coalesce(e.brand,'')    || ' ' ||
               coalesce(e.model,'')    || ' ' ||
-              coalesce(e.serial_number,'') || ' ' ||
-              coalesce(e.inventory_number,''),
+              coalesce(e.serial_number,''),
               $2
             ) AS _score
      FROM equipment e
@@ -116,8 +122,7 @@ async function searchEquipment(searchQuery) {
         OR e.brand ILIKE $1
         OR e.model ILIKE $1
         OR e.serial_number ILIKE $1
-        OR e.inventory_number ILIKE $1
-     ORDER BY _score DESC, e.inventory_number ASC NULLS LAST, e.id ASC
+     ORDER BY _score DESC, e.id ASC
      LIMIT 20`,
     [like, term],
   );
