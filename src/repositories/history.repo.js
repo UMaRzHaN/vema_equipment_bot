@@ -101,7 +101,7 @@ async function getLastRepairCommentsBatch(equipmentIds) {
 async function getOverdueEquipment(thresholdDays) {
   const result = await query(
     `SELECT e.id, e.category, e.brand, e.model,
-            e.serial_number, e.inventory_number,
+            e.serial_number,
             e.current_holder_user_id, e.current_issue_date
      FROM equipment e
      WHERE e.status = 'у пользователя'

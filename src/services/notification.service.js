@@ -14,7 +14,7 @@ const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 function buildOverdueMessage(items, overdueDays) {
   const lines = items.map((item) => {
-    const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || item.inventory_number || `#${item.id}`})`;
+    const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
     return `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
   });
   return `⚠️ Оборудование не возвращено более ${overdueDays} дней:\n\n${lines.join('\n\n')}`;

@@ -11,7 +11,6 @@ describe('validateEquipmentCreate', () => {
       brand: 'Dell',
       model: 'XPS 13',
       serial_number: 'SN-001',
-      inventory_number: 'INV-001',
       purchase_date: '2024-01-15',
       notes: 'Новый',
     });
@@ -113,7 +112,7 @@ describe('validateEquipmentUpdate', () => {
   });
 
   it('accepts null values for optional fields in update', () => {
-    const result = validateEquipmentUpdate({ notes: null, inventory_number: null });
+    const result = validateEquipmentUpdate({ notes: null });
     assert.equal(result.success, true);
   });
 });

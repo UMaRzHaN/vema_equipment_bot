@@ -46,7 +46,7 @@ function buildRoleSelectKeyboard(telegramUserId) {
 function buildEditEquipmentKeyboard() {
   return Markup.keyboard([
     [LABELS.editCategory,      LABELS.editBrand,           LABELS.editModel],
-    [LABELS.editSerialNumber,  LABELS.editInventoryNumber, LABELS.editPurchaseDate],
+    [LABELS.editSerialNumber,  LABELS.editPurchaseDate],
     [LABELS.editNotes,         LABELS.back],
   ]).resize();
 }

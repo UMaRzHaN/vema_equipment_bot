@@ -150,7 +150,7 @@ async function buildCategoryXlsx(categoryName, items) {
   const sheet    = workbook.addWorksheet(String(categoryName).slice(0, 31));
 
   sheet.columns = [
-    { header: 'Инв. номер',      key: 'inventory_number',      width: 15 },
+    { header: '№',               key: 'position',              width: 8  },
     { header: 'Категория',       key: 'category',              width: 20 },
     { header: 'Бренд',           key: 'brand',                 width: 24 },
     { header: 'Модель',          key: 'model',                 width: 18 },
@@ -182,7 +182,7 @@ async function buildCategoryXlsx(categoryName, items) {
       ? formatUser(usersMap.get(item.current_holder_user_id))
       : '';
     sheet.addRow({
-      inventory_number:   idx + 1,
+      position:           idx + 1,
       category:           item.category || '',
       brand:              item.brand || '',
       model:              item.model || '',

@@ -7,7 +7,6 @@ const equipmentCreateSchema = z.object({
   brand:            z.string().max(100).optional().nullable(),
   model:            z.string().min(1, 'Укажите модель').max(100),
   serial_number:    z.string().min(1, 'Укажите серийный номер').max(100),
-  inventory_number: z.string().max(50).optional().nullable(),
   purchase_date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Формат даты: YYYY-MM-DD').optional().nullable(),
   notes:            z.string().max(500).optional().nullable(),
 });

@@ -12,7 +12,6 @@ const LABELS = {
   editBrand:         'Бренд',
   editModel:         'Модель',
   editSerialNumber:  'Серийный номер',
-  editInventoryNumber: 'Инвентарный номер',
   editPurchaseDate:  'Дата покупки',
   editNotes:         'Примечания',
   manageUsers:       '👥 Пользователи',
@@ -26,7 +25,6 @@ const EDITABLE_FIELDS = {
   [LABELS.editBrand]:           'brand',
   [LABELS.editModel]:           'model',
   [LABELS.editSerialNumber]:    'serial_number',
-  [LABELS.editInventoryNumber]: 'inventory_number',
   [LABELS.editPurchaseDate]:    'purchase_date',
   [LABELS.editNotes]:           'notes',
 };

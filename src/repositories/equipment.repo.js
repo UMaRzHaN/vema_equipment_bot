@@ -5,16 +5,15 @@ const { query, transaction } = require('../db');
 async function createEquipment(data) {
   const result = await query(
     `INSERT INTO equipment
-       (category, brand, model, serial_number, inventory_number,
+       (category, brand, model, serial_number,
         purchase_date, status, notes, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW())
      RETURNING *`,
     [
       data.category,
       data.brand || null,
       data.model,
       data.serial_number,
-      data.inventory_number || null,
       data.purchase_date || null,
       data.status,
       data.notes || null,
@@ -147,7 +146,7 @@ async function updateEquipmentStatus(data) {
 }
 
 async function updateEquipmentDetails(data) {
-  const allowed = ['category', 'brand', 'model', 'serial_number', 'inventory_number', 'purchase_date', 'notes'];
+  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'notes'];
   const parts = [];
   const values = [];
   let idx = 1;
@@ -242,11 +241,10 @@ async function atomicStatusChange(statusData, historyData) {
 async function getSuggestionsForField(field, category = null) {
   // Map to literal column names — never interpolate user-supplied strings into SQL
   const COLUMN_MAP = {
-    category:         'category',
-    brand:            'brand',
-    model:            'model',
-    inventory_number: 'inventory_number',
-    purchase_date:    'purchase_date',
+    category:      'category',
+    brand:         'brand',
+    model:         'model',
+    purchase_date: 'purchase_date',
   };
   const col = COLUMN_MAP[field];
   if (!col) return [];

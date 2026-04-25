@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS equipment (
   brand                    TEXT,
   model                    TEXT NOT NULL,
   serial_number            TEXT NOT NULL UNIQUE,
-  inventory_number         TEXT,
   purchase_date            DATE,
   status                   TEXT NOT NULL DEFAULT 'на складе',
   current_holder_user_id   BIGINT,

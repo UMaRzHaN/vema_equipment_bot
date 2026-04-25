@@ -215,7 +215,7 @@ function registerEquipmentHandlers(bot) {
     if (!id) return ctx.reply('Неверный идентификатор.');
     const item = await findEquipmentById(id);
     if (!item) return ctx.editMessageText('Оборудование не найдено.');
-    const label = `${item.category || '-'} ${item.model || '-'} — ${item.serial_number || item.inventory_number || `#${item.id}`}`;
+    const label = `${item.category || '-'} ${item.model || '-'} — ${item.serial_number || `#${item.id}`}`;
     return ctx.editMessageText(
       `❓ Удалить оборудование?\n\n${label}\n\nЭто действие необратимо.`,
       Markup.inlineKeyboard([
@@ -235,7 +235,7 @@ function registerEquipmentHandlers(bot) {
     if (!id) return ctx.reply('Неверный идентификатор.');
     const item = await findEquipmentById(id);
     if (!item) return ctx.editMessageText('Оборудование уже удалено.');
-    const label = `${item.category || '-'} ${item.model || '-'} — ${item.serial_number || item.inventory_number || `#${item.id}`}`;
+    const label = `${item.category || '-'} ${item.model || '-'} — ${item.serial_number || `#${item.id}`}`;
     await removeEquipment(id);
     equipmentActionsTotal.inc({ action: 'deleted' });
     await ctx.editMessageText(`🗑️ Оборудование удалено: ${label}`);

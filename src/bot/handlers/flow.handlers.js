@@ -175,7 +175,7 @@ async function handleRepair(ctx, text, flow) {
   await safeDelete(ctx, flow.sourceMessage, 'repair:source');
   await safeDelete(ctx, flow.promptMessage, 'repair:prompt');
   resetFlow(ctx);
-  await ctx.reply(`Отправлено в ремонт:\n${equipment.category} ${equipment.model} - ${equipment.serial_number || equipment.inventory_number}\nПричина: ${text}`);
+  await ctx.reply(`Отправлено в ремонт:\n${equipment.category} ${equipment.model} - ${equipment.serial_number}\nПричина: ${text}`);
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
 }
 
@@ -192,7 +192,7 @@ async function handleWriteoff(ctx, text, flow) {
   await safeDelete(ctx, flow.sourceMessage, 'writeoff:source');
   await safeDelete(ctx, flow.promptMessage, 'writeoff:prompt');
   resetFlow(ctx);
-  await ctx.reply(`Оборудование списано:\n${equipment.category} ${equipment.model} - ${equipment.serial_number || equipment.inventory_number}`);
+  await ctx.reply(`Оборудование списано:\n${equipment.category} ${equipment.model} - ${equipment.serial_number}`);
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
 }
 
