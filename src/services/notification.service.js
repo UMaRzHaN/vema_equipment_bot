@@ -41,6 +41,64 @@ function buildOverdueMessage(items, overdueDays, isForUser = false, usersMap = n
   return `${prefix}\n\n${lines.join('\n\n')}`;
 }
 
+function buildOverdueAdminMessageGrouped(items, overdueDays, usersMap = new Map()) {
+  const itemsByHolder = items.reduce((acc, item) => {
+    const userId = Number(item.current_holder_user_id);
+    if (!Number.isFinite(userId) || userId <= 0) return acc;
+    if (!acc[userId]) acc[userId] = [];
+    acc[userId].push(item);
+    return acc;
+  }, {});
+
+  const blocks = Object.entries(itemsByHolder).map(([userIdStr, userItems]) => {
+    const userId = Number(userIdStr);
+    const user = usersMap.get(userId);
+    let header = `Держатель: ${userId}`;
+    if (user) {
+      const fullName = escapeHtml([user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '-');
+      header = `Держатель: <a href="tg://user?id=${user.telegram_user_id}">${fullName}</a>`;
+      if (user.phone) header += ` (Тел: ${escapeHtml(user.phone)})`;
+    }
+
+    const lines = userItems.map((item) => {
+      const name = escapeHtml(`${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`);
+      return `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
+    });
+
+    return `${header}\n${lines.join('\n')}`;
+  });
+
+  const prefix = `⚠️ Оборудование не возвращено более ${overdueDays} дней (по держателям):`;
+  return `${prefix}\n\n${blocks.join('\n\n')}`;
+}
+
+function buildOverdueAdminMessageForHolder(holderUserId, items, overdueDays, usersMap = new Map()) {
+  const user = usersMap.get(Number(holderUserId));
+  let header = `Держатель: ${holderUserId}`;
+  if (user) {
+    const fullName = escapeHtml([user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '-');
+    header = `Держатель: <a href="tg://user?id=${user.telegram_user_id}">${fullName}</a>`;
+    if (user.phone) header += ` (Тел: ${escapeHtml(user.phone)})`;
+  }
+
+  const lines = items.map((item) => {
+    const name = escapeHtml(`${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`);
+    return `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
+  });
+
+  const prefix = `⚠️ Оборудование не возвращено более ${overdueDays} дней:`;
+  return `${prefix}\n\n${header}\n${lines.join('\n')}`;
+}
+
+function buildExtendKeyboardChunk(itemsChunk) {
+  const rows = itemsChunk.map((item) => {
+    const labelBase = `${item.category || ''} ${item.model || ''}`.trim() || `#${item.id}`;
+    const label = labelBase.length > 28 ? `${labelBase.slice(0, 25)}…` : labelBase;
+    return [{ text: `🔄 Продлить: ${label}`, callback_data: `extend_${item.id}` }];
+  });
+  return { inline_keyboard: rows };
+}
+
 function buildDueMessage(item, isForUser = false) {
   const name = escapeHtml(`${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`);
   const now = new Date();
@@ -96,36 +154,56 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         const holders = await findUsersByTelegramIds(holderIds);
         const usersMap = new Map(holders.map(u => [Number(u.telegram_user_id), u]));
 
-        const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false, usersMap);
-        await notificationQueue.add(
-          'sendOverdueAdmins',
-          { recipients: allAdminIds, message: adminMessage },
-          { ...JOB_OPTS, jobId: `overdue-admins-${slot}` },
-        );
-
-        const itemsByUser = overdueItems.reduce((acc, item) => {
-          const userId = item.current_holder_user_id;
+        // 1) Общие сообщения держателям: по одному сообщению на держателя со списком его просрочек
+        const itemsByHolder = overdueItems.reduce((acc, item) => {
+          const userId = Number(item.current_holder_user_id);
+          if (!Number.isFinite(userId) || userId <= 0) return acc;
           if (!acc[userId]) acc[userId] = [];
           acc[userId].push(item);
           return acc;
         }, {});
 
-        for (const [userId, userItems] of Object.entries(itemsByUser)) {
-          if (allAdminIds.includes(Number(userId))) continue;
-          for (const item of userItems) {
-            const userMessage = buildOverdueMessage([item], overdueDays, true);
+        for (const [userIdStr, userItems] of Object.entries(itemsByHolder)) {
+          const userId = Number(userIdStr);
+          const userMessage = buildOverdueMessage(userItems, overdueDays, true);
+          await notificationQueue.add(
+            'sendOverdueUser',
+            {
+              recipients: [userId],
+              message: userMessage,
+            },
+              { ...JOB_OPTS, jobId: `overdue-user-${userId}-${slot}` },
+            );
+
+          // Telegram inline keyboards have a practical button limit per message.
+          // To avoid "limits on extension", send additional messages with buttons in chunks.
+          const chunkSize = 20;
+          for (let i = 0; i < userItems.length; i += chunkSize) {
+            const chunk = userItems.slice(i, i + chunkSize);
             await notificationQueue.add(
               'sendOverdueUser',
               {
-                recipients: [Number(userId)],
-                message: userMessage,
-                replyMarkup: {
-                  inline_keyboard: [[{ text: '🔄 Продлить срок', callback_data: `extend_${item.id}` }]],
-                },
+                recipients: [userId],
+                message: `Выберите оборудование для продления (${Math.floor(i / chunkSize) + 1}/${Math.ceil(userItems.length / chunkSize)}):`,
+                replyMarkup: buildExtendKeyboardChunk(chunk),
               },
-              { ...JOB_OPTS, jobId: `overdue-user-${userId}-${item.id}-${slot}` },
+              { ...JOB_OPTS, jobId: `overdue-user-${userId}-kb-${Math.floor(i / chunkSize)}-${slot}` },
             );
           }
+        }
+
+        // 2) Админам: отдельное сообщение на каждого держателя ("пользователь -> какие оборудования просрочил")
+        for (const [holderIdStr, holderItems] of Object.entries(itemsByHolder)) {
+          const holderId = Number(holderIdStr);
+          const recipients = allAdminIds.filter(id => Number(id) !== holderId);
+          if (recipients.length === 0) continue;
+
+          const adminMessage = buildOverdueAdminMessageForHolder(holderId, holderItems, overdueDays, usersMap);
+          await notificationQueue.add(
+            'sendOverdueAdmins',
+            { recipients, message: adminMessage },
+            { ...JOB_OPTS, jobId: `overdue-admins-${holderId}-${slot}` },
+          );
         }
       } else {
         logger.info('Overdue check: no overdue items');
