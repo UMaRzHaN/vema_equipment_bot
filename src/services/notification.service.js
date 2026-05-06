@@ -63,7 +63,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
 
-      // Group by user and send to each user
+      // Group by user and send to each user (excluding admins)
       const itemsByUser = overdueItems.reduce((acc, item) => {
         const userId = item.current_holder_user_id;
         if (!acc[userId]) acc[userId] = [];
@@ -72,6 +72,8 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
       }, {});
 
       for (const [userId, userItems] of Object.entries(itemsByUser)) {
+        // Skip if user is an admin
+        if (allAdminIds.includes(Number(userId))) continue;
         const userMessage = buildOverdueMessage(userItems, overdueDays, true);
         await notificationQueue.add(
           'sendOverdueUser',
