@@ -57,6 +57,10 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
   let intervalHandle = null;
 
   async function runCheck() {
+    // Slot: YYYY-MM-DD-HH rounded to 12h window — prevents duplicate jobs on restart
+    const now = new Date();
+    const slot = `${now.toISOString().slice(0, 10)}-${now.getUTCHours() < 12 ? '00' : '12'}`;
+
     try {
       // ── Overdue by global threshold ───────────────────────────────────────
       const overdueItems = await findOverdueEquipment(overdueDays);
@@ -70,7 +74,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         await notificationQueue.add(
           'sendOverdueAdmins',
           { recipients: allAdminIds, message: adminMessage },
-          { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+          { jobId: `overdue-admins-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
         );
 
         const itemsByUser = overdueItems.reduce((acc, item) => {
@@ -86,7 +90,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
           await notificationQueue.add(
             'sendOverdueUser',
             { recipients: [Number(userId)], message: userMessage },
-            { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+            { jobId: `overdue-user-${userId}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
           );
         }
       } else {
@@ -115,7 +119,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
                 inline_keyboard: [[{ text: '🔄 Продлить срок', callback_data: `extend_${item.id}` }]],
               },
             },
-            { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+            { jobId: `due-user-${userId}-${item.id}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
           );
 
           // Notify admins (without extend button)
@@ -125,7 +129,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
             await notificationQueue.add(
               'sendDueAdmins',
               { recipients: adminIds, message: adminMessage },
-              { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+              { jobId: `due-admins-${item.id}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
             );
           }
         }
