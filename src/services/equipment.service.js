@@ -127,7 +127,7 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
         status: STATUS.IN_STOCK,
         current_holder_user_id: null,
         current_issue_date: null,
-        warehouse: warehouse || 'Ташкент',
+        warehouse: warehouse || null,
       },
       {
         equipment_id: equipment.id,
