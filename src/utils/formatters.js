@@ -6,6 +6,8 @@ function formatDate(value) {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
+  // Adjust for 5-hour lag (add 5 hours to display correct time)
+  date.setHours(date.getHours() + 5);
   return date.toLocaleString('ru-RU', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',

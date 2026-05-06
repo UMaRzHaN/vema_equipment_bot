@@ -19,15 +19,15 @@ function startNotificationWorker(bot) {
   const worker = new Worker(
     'notifications',
     async (job) => {
-      const { adminIds, message } = job.data;
+      const { recipients, message } = job.data;
 
-      for (const adminId of adminIds) {
+      for (const recipientId of recipients) {
         try {
-          await bot.telegram.sendMessage(adminId, message, { parse_mode: 'HTML' });
+          await bot.telegram.sendMessage(recipientId, message, { parse_mode: 'HTML' });
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
-          // Log per-admin failures but continue to next admin
-          logger.error({ adminId, err: err.message }, 'Failed to send notification to admin');
+          // Log per-recipient failures but continue to next recipient
+          logger.error({ recipientId, err: err.message }, 'Failed to send notification to recipient');
           notificationsTotal.inc({ status: 'failed' });
         }
       }

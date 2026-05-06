@@ -83,4 +83,12 @@ async function findUsersByTelegramIds(ids) {
   return result.rows;
 }
 
-module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };
+async function getUsersByRole(role) {
+  const result = await query(
+    'SELECT * FROM users WHERE role = $1',
+    [role],
+  );
+  return result.rows;
+}
+
+module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, getUsersByRole, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };

@@ -5,6 +5,7 @@ const { bullRedis } = require('../redis');
 const { config } = require('../config');
 const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
+const { getUsersByRole } = require('../repositories/user.repo');
 const { formatDate } = require('../utils/formatters');
 
 // Queue is created lazily — bullRedis connects only when the first job is added
@@ -12,12 +13,15 @@ const notificationQueue = new Queue('notifications', { connection: bullRedis });
 
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
-function buildOverdueMessage(items, overdueDays) {
+function buildOverdueMessage(items, overdueDays, isForUser = false) {
   const lines = items.map((item) => {
     const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
     return `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
   });
-  return `⚠️ Оборудование не возвращено более ${overdueDays} дней:\n\n${lines.join('\n\n')}`;
+  const prefix = isForUser
+    ? `⚠️ У вас есть просроченное оборудование (более ${overdueDays} дней):`
+    : `⚠️ Оборудование не возвращено более ${overdueDays} дней:`;
+  return `${prefix}\n\n${lines.join('\n\n')}`;
 }
 
 /**
@@ -30,8 +34,8 @@ function buildOverdueMessage(items, overdueDays) {
  *
  * @returns {{ initialTimeout: NodeJS.Timeout, interval: NodeJS.Timeout | null }}
  */
-function scheduleOverdueCheck(adminIds, overdueDays) {
-  if (!adminIds || adminIds.length === 0) {
+async function scheduleOverdueCheck(envAdminIds, overdueDays) {
+  if (!envAdminIds || envAdminIds.length === 0) {
     logger.warn('Notification scheduler: no ADMIN_IDS, skipping');
     return { initialTimeout: null, interval: null };
   }
@@ -46,13 +50,35 @@ function scheduleOverdueCheck(adminIds, overdueDays) {
         return;
       }
       logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
-      const message = buildOverdueMessage(overdueItems, overdueDays);
 
+      // Get all admin IDs: env + role-based
+      const roleAdmins = await getUsersByRole('admin');
+      const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => u.telegram_user_id)])];
+
+      // Send to admins
+      const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false);
       await notificationQueue.add(
-        'sendOverdue',
-        { adminIds, message },
+        'sendOverdueAdmins',
+        { recipients: allAdminIds, message: adminMessage },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
+
+      // Group by user and send to each user
+      const itemsByUser = overdueItems.reduce((acc, item) => {
+        const userId = item.current_holder_user_id;
+        if (!acc[userId]) acc[userId] = [];
+        acc[userId].push(item);
+        return acc;
+      }, {});
+
+      for (const [userId, userItems] of Object.entries(itemsByUser)) {
+        const userMessage = buildOverdueMessage(userItems, overdueDays, true);
+        await notificationQueue.add(
+          'sendOverdueUser',
+          { recipients: [Number(userId)], message: userMessage },
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+        );
+      }
     } catch (err) {
       logger.error({ err: err.message }, 'Overdue check failed');
     }
