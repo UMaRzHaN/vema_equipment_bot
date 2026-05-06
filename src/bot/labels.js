@@ -14,6 +14,7 @@ const LABELS = {
   editSerialNumber:  'Серийный номер',
   editPurchaseDate:  'Дата покупки',
   editNotes:         'Примечания',
+  editWarehouse:     'Склад',
   manageUsers:       '👥 Пользователи',
   sharePhone:        '📱 Поделиться номером',
   editProfileInline: '✏️ Редактировать профиль',
@@ -27,6 +28,7 @@ const EDITABLE_FIELDS = {
   [LABELS.editSerialNumber]:    'serial_number',
   [LABELS.editPurchaseDate]:    'purchase_date',
   [LABELS.editNotes]:           'notes',
+  [LABELS.editWarehouse]:       'warehouse',
 };
 
 module.exports = { EDITABLE_FIELDS, LABELS };

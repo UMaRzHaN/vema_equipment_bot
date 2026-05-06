@@ -43,16 +43,26 @@ function buildRoleSelectKeyboard(telegramUserId) {
 }
 
 
-function buildEditEquipmentKeyboard() {
+function buildEditEquipmentKeyboard({ isInStock = false } = {}) {
+  const lastRow = isInStock
+    ? [LABELS.editNotes, LABELS.editWarehouse, LABELS.back]
+    : [LABELS.editNotes, LABELS.back];
   return Markup.keyboard([
-    [LABELS.editCategory,      LABELS.editBrand,           LABELS.editModel],
-    [LABELS.editSerialNumber,  LABELS.editPurchaseDate],
-    [LABELS.editNotes,         LABELS.back],
+    [LABELS.editCategory,     LABELS.editBrand,        LABELS.editModel],
+    [LABELS.editSerialNumber, LABELS.editPurchaseDate],
+    lastRow,
   ]).resize();
 }
 
 function buildBackKeyboard() {
   return Markup.keyboard([[LABELS.back]]).resize();
+}
+
+function buildLocationRequestKeyboard() {
+  return Markup.keyboard([
+    [Markup.button.locationRequest('📍 Отправить мою локацию')],
+    [LABELS.back],
+  ]).resize();
 }
 
 function buildPhoneRequestKeyboard() {
@@ -106,6 +116,7 @@ function buildCategoryExportKeyboard(categoryName) {
 module.exports = {
   ITEMS_PER_PAGE,
   buildBackKeyboard,
+  buildLocationRequestKeyboard,
   buildCategoryExportKeyboard,
   buildCategoryItemsKeyboard,
   buildCategoryListKeyboard,

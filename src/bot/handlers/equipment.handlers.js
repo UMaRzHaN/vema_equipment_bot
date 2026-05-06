@@ -4,7 +4,7 @@ const { Markup } = require('telegraf');
 const { isAdmin, hasRole, isEffectiveAdmin, isEffectiveManager } = require('../config');
 const logger = require('../../utils/logger');
 const { safe } = require('../middlewares/error.handler');
-const { buildEditEquipmentKeyboard, mainMenu } = require('../views/menus');
+const { buildEditEquipmentKeyboard, buildLocationRequestKeyboard, mainMenu } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
@@ -139,7 +139,10 @@ function registerEquipmentHandlers(bot) {
     await ctx.answerCbQuery();
     ensureSession(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.RETURN_LOCATION, 1, { equipmentId: id }, { sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
-    const prompt = await ctx.reply('Отправьте локацию склада или введите город вручную:');
+    const prompt = await ctx.reply(
+      'Отправьте вашу локацию или введите название города вручную:',
+      buildLocationRequestKeyboard(),
+    );
     ctx.session.flow.promptMessage = rememberMessage(prompt);
   }, 'return'));
 
@@ -203,7 +206,7 @@ function registerEquipmentHandlers(bot) {
     if (!item) return ctx.editMessageText('Оборудование не найдено.');
     ensureSession(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_EQUIPMENT, EDIT_STEP.SELECT_FIELD, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
-    const sel = await ctx.reply('Выберите поле для редактирования:', buildEditEquipmentKeyboard());
+    const sel = await ctx.reply('Выберите поле для редактирования:', buildEditEquipmentKeyboard({ isInStock: item.status === STATUS.IN_STOCK }));
     ctx.session.flow.selectorMessage = rememberMessage(sel);
   }, 'edit'));
 

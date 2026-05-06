@@ -104,7 +104,7 @@ async function removeEquipment(id) {
 async function giveEquipmentToUser(equipment, userId) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.WITH_USER, current_holder_user_id: userId, current_issue_date: new Date().toISOString() },
+      { id: equipment.id, status: STATUS.WITH_USER, current_holder_user_id: userId, current_issue_date: new Date().toISOString(), warehouse: null },
       { equipment_id: equipment.id, action: 'выдано', from_status: STATUS.IN_STOCK, to_status: STATUS.WITH_USER, to_user_id: userId, performed_by_user_id: userId },
     );
   } catch (err) {
@@ -145,7 +145,7 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
 async function startRepair(equipment, performedByUserId, comment) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.REPAIR, current_holder_user_id: null, current_issue_date: null },
+      { id: equipment.id, status: STATUS.REPAIR, current_holder_user_id: null, current_issue_date: null, warehouse: null },
       { equipment_id: equipment.id, action: 'в ремонт', from_status: equipment.status, to_status: STATUS.REPAIR, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
     );
   } catch (err) { throw wrapStatusConflict(err); }
@@ -165,7 +165,7 @@ async function completeRepair(equipment, performedByUserId) {
 async function writeOffEquipment(equipment, performedByUserId, comment) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.WRITTEN_OFF, current_holder_user_id: null, current_issue_date: null },
+      { id: equipment.id, status: STATUS.WRITTEN_OFF, current_holder_user_id: null, current_issue_date: null, warehouse: null },
       { equipment_id: equipment.id, action: 'списано', from_status: equipment.status, to_status: STATUS.WRITTEN_OFF, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
     );
   } catch (err) { throw wrapStatusConflict(err); }

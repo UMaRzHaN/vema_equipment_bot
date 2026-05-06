@@ -11,6 +11,7 @@ const { ensureSession, resetFlow } = require('../utils');
 const { FLOW_TYPE, ADD_STEP, EDIT_STEP, TOTAL_ADD_STEPS } = require('../fsm/states');
 const { makeFlow } = require('../fsm/session.schema');
 const {
+  STATUS,
   addEquipment,
   findEquipmentById,
   findEquipmentBySerial,
@@ -194,7 +195,7 @@ async function handleReturnLocation(ctx, text, flow) {
 
   const warehouse = text?.trim();
   if (!warehouse) {
-    return ctx.reply('Введите город склада, куда возвращаете оборудование:');
+    return ctx.reply('Введите название города или нажмите кнопку "📍 Отправить мою локацию".');
   }
 
   const updated = await returnEquipmentFromUser(equipment, ctx.from.id, warehouse);
@@ -205,7 +206,7 @@ async function handleReturnLocation(ctx, text, flow) {
   await safeDelete(ctx, flow.promptMessage, 'return:prompt');
   resetFlow(ctx);
 
-  await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`);
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`, mainMenu(ctx));
   const img = await createWarehouseImage(warehouse);
   await ctx.replyWithPhoto({ source: img, filename: `Склад. ${warehouse}.png` }, { caption: `Склад: ${warehouse}` });
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
@@ -220,7 +221,7 @@ async function handleReturnLocationWithGeo(ctx, flow) {
 
   const city = await getCityByCoordinates(location.latitude, location.longitude);
   if (!city) {
-    return ctx.reply('Не удалось определить город по локации. Введите город склада вручную:');
+    return ctx.reply('Не удалось определить город по локации. Введите название города вручную:');
   }
 
   const updated = await returnEquipmentFromUser(equipment, ctx.from.id, city);
@@ -231,7 +232,7 @@ async function handleReturnLocationWithGeo(ctx, flow) {
   await safeDelete(ctx, flow.promptMessage, 'return:prompt');
   resetFlow(ctx);
 
-  await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`);
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`, mainMenu(ctx));
   const img = await createWarehouseImage(city);
   await ctx.replyWithPhoto({ source: img, filename: `Склад. ${city}.png` }, { caption: `Склад: ${city}` });
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
@@ -268,6 +269,9 @@ async function handleEditEquipment(ctx, text, flow) {
     }
     const field = EDITABLE_FIELDS[text];
     if (!field) return ctx.reply('Пожалуйста, выберите поле из списка или нажмите 🔙 Назад.');
+    if (field === 'warehouse' && equipment.status !== STATUS.IN_STOCK) {
+      return ctx.reply('Склад можно указать только когда оборудование находится на складе.');
+    }
 
     const promptSuffix = field === 'purchase_date' ? ' (ДД.ММ.ГГГГ)' : '';
     const promptMsg = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());

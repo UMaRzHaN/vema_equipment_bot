@@ -11,7 +11,9 @@ const equipmentCreateSchema = z.object({
   notes:            z.string().max(500).optional().nullable(),
 });
 
-const equipmentUpdateSchema = equipmentCreateSchema.partial();
+const equipmentUpdateSchema = equipmentCreateSchema.partial().extend({
+  warehouse: z.string().max(100).optional().nullable(),
+});
 
 function validateEquipmentCreate(data) {
   return equipmentCreateSchema.safeParse(data);
