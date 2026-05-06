@@ -8,7 +8,7 @@ const { buildBackKeyboard, buildEditEquipmentKeyboard, buildLocationRequestKeybo
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
-const { FLOW_TYPE, EDIT_STEP, GIVE_STEP } = require('../fsm/states');
+const { FLOW_TYPE, EDIT_STEP } = require('../fsm/states');
 const { formatDate, statusLabel } = require('../../utils/formatters');
 const { getUserByTelegramId, formatUser } = require('../../services/user.service');
 const { getFullEquipmentHistory } = require('../../services/history.service');
@@ -17,11 +17,8 @@ const { ACTIONS_REGEX, LABELS } = require('../constants');
 const {
   STATUS,
   completeRepair,
-  extendEquipmentDueDate,
   findEquipmentById,
-  giveEquipmentToUser,
   removeEquipment,
-  returnEquipmentFromUser,
 } = require('../../services/equipment.service');
 const { equipmentActionsTotal } = require('../../utils/metrics');
 

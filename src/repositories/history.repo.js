@@ -106,7 +106,8 @@ async function getOverdueEquipment(thresholdDays) {
      FROM equipment e
      WHERE e.status = 'у пользователя'
        AND e.current_issue_date IS NOT NULL
-       AND e.current_issue_date < NOW() - ($1 || ' days')::INTERVAL`,
+       AND e.current_issue_date < NOW() - ($1 || ' days')::INTERVAL
+       AND e.due_date IS NULL`,
     [thresholdDays],
   );
   return result.rows;

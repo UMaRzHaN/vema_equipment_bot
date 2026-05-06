@@ -2,12 +2,18 @@
 
 const { Queue } = require('bullmq');
 const { bullRedis } = require('../redis');
-const { config } = require('../config');
 const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
 const { findDueEquipment } = require('./equipment.service');
 const { getUsersByRole, findUsersByTelegramIds } = require('../repositories/user.repo');
-const { formatDate } = require('../utils/formatters');
+const { formatDate, escapeHtml } = require('../utils/formatters');
+
+const JOB_OPTS = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 5000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail:     { count: 50 },
+};
 
 // Queue is created lazily — bullRedis connects only when the first job is added
 const notificationQueue = new Queue('notifications', { connection: bullRedis });
@@ -16,14 +22,14 @@ const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 function buildOverdueMessage(items, overdueDays, isForUser = false, usersMap = new Map()) {
   const lines = items.map((item) => {
-    const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
+    const name = escapeHtml(`${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`);
     let line = `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
     if (!isForUser) {
       const user = usersMap.get(Number(item.current_holder_user_id));
       if (user) {
-        const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '-';
+        const fullName = escapeHtml([user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '-');
         const link = `<a href="tg://user?id=${user.telegram_user_id}">${fullName}</a>`;
-        const phone = user.phone ? `\n  Тел: ${user.phone}` : '';
+        const phone = user.phone ? `\n  Тел: ${escapeHtml(user.phone)}` : '';
         line += `\n  Держатель: ${link}${phone}`;
       }
     }
@@ -36,7 +42,7 @@ function buildOverdueMessage(items, overdueDays, isForUser = false, usersMap = n
 }
 
 function buildDueMessage(item, isForUser = false) {
-  const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
+  const name = escapeHtml(`${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`);
   const now = new Date();
   const due = new Date(item.due_date);
   const isOverdue = due <= now;
@@ -88,7 +94,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         await notificationQueue.add(
           'sendOverdueAdmins',
           { recipients: allAdminIds, message: adminMessage },
-          { jobId: `overdue-admins-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+          { ...JOB_OPTS, jobId: `overdue-admins-${slot}` },
         );
 
         const itemsByUser = overdueItems.reduce((acc, item) => {
@@ -100,12 +106,20 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
 
         for (const [userId, userItems] of Object.entries(itemsByUser)) {
           if (allAdminIds.includes(Number(userId))) continue;
-          const userMessage = buildOverdueMessage(userItems, overdueDays, true);
-          await notificationQueue.add(
-            'sendOverdueUser',
-            { recipients: [Number(userId)], message: userMessage },
-            { jobId: `overdue-user-${userId}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-          );
+          for (const item of userItems) {
+            const userMessage = buildOverdueMessage([item], overdueDays, true);
+            await notificationQueue.add(
+              'sendOverdueUser',
+              {
+                recipients: [Number(userId)],
+                message: userMessage,
+                replyMarkup: {
+                  inline_keyboard: [[{ text: '🔄 Продлить срок', callback_data: `extend_${item.id}` }]],
+                },
+              },
+              { ...JOB_OPTS, jobId: `overdue-user-${userId}-${item.id}-${slot}` },
+            );
+          }
         }
       } else {
         logger.info('Overdue check: no overdue items');
@@ -117,7 +131,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         logger.info({ count: dueItems.length }, `Due date check: ${dueItems.length} items due`);
 
         const roleAdmins2 = await getUsersByRole('admin');
-        const allAdminIds2 = [...new Set([...envAdminIds, ...roleAdmins2.map(u => u.telegram_user_id)])];
+        const allAdminIds2 = [...new Set([...envAdminIds, ...roleAdmins2.map(u => Number(u.telegram_user_id))])];
 
         for (const item of dueItems) {
           const userId = Number(item.current_holder_user_id);
@@ -133,7 +147,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
                 inline_keyboard: [[{ text: '🔄 Продлить срок', callback_data: `extend_${item.id}` }]],
               },
             },
-            { jobId: `due-user-${userId}-${item.id}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+            { ...JOB_OPTS, jobId: `due-user-${userId}-${item.id}-${slot}` },
           );
 
           // Notify admins (without extend button)
@@ -143,7 +157,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
             await notificationQueue.add(
               'sendDueAdmins',
               { recipients: adminIds, message: adminMessage },
-              { jobId: `due-admins-${item.id}-${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+              { ...JOB_OPTS, jobId: `due-admins-${item.id}-${slot}` },
             );
           }
         }
