@@ -22,7 +22,6 @@ const {
   writeOffEquipment,
   returnEquipmentFromUser,
 } = require('../../services/equipment.service');
-const { createWarehouseImage } = require('../../services/report.service');
 const { getCityByCoordinates } = require('../../services/location.service');
 const {
   getEquipmentSuggestionText,
@@ -210,8 +209,6 @@ async function handleReturnLocation(ctx, text, flow) {
   resetFlow(ctx);
 
   await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`, mainMenu(ctx));
-  const img = await createWarehouseImage(warehouse);
-  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${warehouse}.png` }, { caption: `Склад: ${warehouse}` });
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
 }
 
@@ -236,8 +233,6 @@ async function handleReturnLocationWithGeo(ctx, flow) {
   resetFlow(ctx);
 
   await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`, mainMenu(ctx));
-  const img = await createWarehouseImage(city);
-  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${city}.png` }, { caption: `Склад: ${city}` });
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
 }
 

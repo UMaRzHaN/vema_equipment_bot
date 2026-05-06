@@ -114,7 +114,7 @@ async function createCategoryImage(categoryName, items) {
     const rowVals = [
       String(idx + 1),
       `${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
-      item.warehouse || 'Ташкент',
+      item.warehouse || '-',
       statusLabel(item.status),
       holder,
       formatDate(item.current_issue_date),
@@ -218,7 +218,7 @@ async function buildCategoryXlsx(categoryName, items) {
       brand:              item.brand || '',
       model:              item.model || '',
       serial_number:      item.serial_number || '',
-      warehouse:          item.warehouse || 'Ташкент',
+      warehouse:          item.warehouse || '-',
       purchase_date:      formatDateOnly(item.purchase_date),
       status:             statusLabel(item.status),
       holder,
