@@ -6,7 +6,7 @@ const { config } = require('../config');
 const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
 const { findDueEquipment } = require('./equipment.service');
-const { getUsersByRole } = require('../repositories/user.repo');
+const { getUsersByRole, findUsersByTelegramIds } = require('../repositories/user.repo');
 const { formatDate } = require('../utils/formatters');
 
 // Queue is created lazily — bullRedis connects only when the first job is added
@@ -14,10 +14,20 @@ const notificationQueue = new Queue('notifications', { connection: bullRedis });
 
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
-function buildOverdueMessage(items, overdueDays, isForUser = false) {
+function buildOverdueMessage(items, overdueDays, isForUser = false, usersMap = new Map()) {
   const lines = items.map((item) => {
     const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
-    return `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
+    let line = `• ${name}\n  Выдано: ${formatDate(item.current_issue_date)}`;
+    if (!isForUser) {
+      const user = usersMap.get(Number(item.current_holder_user_id));
+      if (user) {
+        const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '-';
+        const link = `<a href="tg://user?id=${user.telegram_user_id}">${fullName}</a>`;
+        const phone = user.phone ? `\n  Тел: ${user.phone}` : '';
+        line += `\n  Держатель: ${link}${phone}`;
+      }
+    }
+    return line;
   });
   const prefix = isForUser
     ? `⚠️ У вас есть просроченное оборудование (более ${overdueDays} дней):`
@@ -70,7 +80,11 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         const roleAdmins = await getUsersByRole('admin');
         const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => Number(u.telegram_user_id))])];
 
-        const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false);
+        const holderIds = [...new Set(overdueItems.map(i => Number(i.current_holder_user_id)))];
+        const holders = await findUsersByTelegramIds(holderIds);
+        const usersMap = new Map(holders.map(u => [Number(u.telegram_user_id), u]));
+
+        const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false, usersMap);
         await notificationQueue.add(
           'sendOverdueAdmins',
           { recipients: allAdminIds, message: adminMessage },
