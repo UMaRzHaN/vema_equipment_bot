@@ -16,10 +16,10 @@ const { initDb, closeDb } = require('./db');
 const { connectRedis, closeRedis } = require('./redis');
 const { createBot } = require('./bot');
 const { startNotificationWorker } = require('./workers/notification.worker');
-const { scheduleOverdueCheck } = require('./services/notification.service');
+// const { scheduleOverdueCheck } = require('./services/notification.service'); // Disabled in polling mode
 
 let notificationWorker = null;
-let overdueTimer = null;
+// let overdueTimer = null; // Disabled in polling mode
 
 async function main() {
   await connectRedis();
@@ -31,7 +31,7 @@ async function main() {
   await bot.telegram.deleteWebhook({ drop_pending_updates: true });
 
   notificationWorker = startNotificationWorker(bot);
-  overdueTimer = scheduleOverdueCheck(config.bot.adminIds, config.overdueDays);
+  // Note: Overdue scheduler is disabled in polling mode (dev only)
 
   await bot.launch();
   logger.info('Bot started in polling mode');
@@ -44,10 +44,7 @@ async function shutdown(signal) {
       await notificationWorker.close();
       logger.info('Notification worker closed');
     }
-    if (overdueTimer) {
-      clearTimeout(overdueTimer.initialTimeout);
-      clearInterval(overdueTimer.interval);
-    }
+    // No overdue timer in polling mode
     await closeDb();
     await closeRedis();
     logger.info('Shutdown complete');
