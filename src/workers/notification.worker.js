@@ -21,9 +21,12 @@ function startNotificationWorker(bot) {
     async (job) => {
       const { recipients, message } = job.data;
 
+      const extra = { parse_mode: 'HTML' };
+      if (job.data.replyMarkup) extra.reply_markup = job.data.replyMarkup;
+
       for (const recipientId of recipients) {
         try {
-          await bot.telegram.sendMessage(recipientId, message, { parse_mode: 'HTML' });
+          await bot.telegram.sendMessage(recipientId, message, extra);
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
           // Log per-recipient failures but continue to next recipient

@@ -4,11 +4,11 @@ const { Markup } = require('telegraf');
 const { isAdmin, hasRole, isEffectiveAdmin, isEffectiveManager } = require('../config');
 const logger = require('../../utils/logger');
 const { safe } = require('../middlewares/error.handler');
-const { buildEditEquipmentKeyboard, buildLocationRequestKeyboard, mainMenu } = require('../views/menus');
+const { buildBackKeyboard, buildEditEquipmentKeyboard, buildLocationRequestKeyboard, mainMenu } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
-const { FLOW_TYPE, EDIT_STEP } = require('../fsm/states');
+const { FLOW_TYPE, EDIT_STEP, GIVE_STEP } = require('../fsm/states');
 const { formatDate, statusLabel } = require('../../utils/formatters');
 const { getUserByTelegramId, formatUser } = require('../../services/user.service');
 const { getFullEquipmentHistory } = require('../../services/history.service');
@@ -17,6 +17,7 @@ const { ACTIONS_REGEX, LABELS } = require('../constants');
 const {
   STATUS,
   completeRepair,
+  extendEquipmentDueDate,
   findEquipmentById,
   giveEquipmentToUser,
   removeEquipment,
@@ -97,29 +98,41 @@ function registerEquipmentHandlers(bot) {
     });
   }, 'history'));
 
-  // Give equipment
+  // Give equipment — ask for duration first
   bot.action(ACTIONS_REGEX.GIVE, safe(async (ctx) => {
     const id = parseId(ctx.match[1]);
     if (!id) { await ctx.answerCbQuery(LABELS.ERR_INVALID_ID, { show_alert: true }); return; }
 
-    const lockKey = `lock:give:${id}`;
-    const locked = await acquireLock(lockKey);
-    if (!locked) { await ctx.answerCbQuery(LABELS.ERR_ACTION_IN_PROGRESS, { show_alert: true }); return; }
+    const item = await findEquipmentById(id);
+    if (!item) { await ctx.answerCbQuery(LABELS.ERR_NOT_FOUND, { show_alert: true }); return; }
+    if (item.status !== STATUS.IN_STOCK) { await ctx.answerCbQuery('Оборудование недоступно для выдачи.', { show_alert: true }); return; }
 
-    try {
-      const item = await findEquipmentById(id);
-      if (!item) { await ctx.answerCbQuery(LABELS.ERR_NOT_FOUND, { show_alert: true }); return; }
-      if (item.status !== STATUS.IN_STOCK) { await ctx.answerCbQuery('Оборудование недоступно для выдачи.', { show_alert: true }); return; }
-      await ctx.answerCbQuery(LABELS.OK_GIVEN);
-      const updated = await giveEquipmentToUser(item, ctx.from.id);
-      equipmentActionsTotal.inc({ action: 'given' });
-      const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
-      const text   = await renderEquipmentCard(updated);
-      return markup ? ctx.editMessageText(text, markup) : ctx.editMessageText(text);
-    } finally {
-      await redis.del(lockKey);
-    }
+    await ctx.answerCbQuery();
+    ensureSession(ctx);
+    ctx.session.flow = makeFlow(FLOW_TYPE.GIVE_EQUIPMENT, 1, {}, {
+      equipmentId: id,
+      sourceMessage: rememberMessage(ctx.callbackQuery?.message),
+    });
+    const prompt = await ctx.reply('На сколько дней берёте оборудование? Введите число:', buildBackKeyboard());
+    ctx.session.flow.promptMessage = rememberMessage(prompt);
   }, 'give'));
+
+  // Extend due date
+  bot.action(/extend_(\d+)/, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    const id = parseId(ctx.match[1]);
+    if (!id) return;
+    const item = await findEquipmentById(id);
+    if (!item) return ctx.reply('Оборудование не найдено.');
+    if (item.status !== STATUS.WITH_USER) return ctx.reply('Оборудование уже возвращено.');
+    if (Number(item.current_holder_user_id) !== ctx.from.id && !isEffectiveAdmin(ctx)) {
+      return ctx.reply('Это оборудование не у вас.');
+    }
+    ensureSession(ctx);
+    ctx.session.flow = makeFlow(FLOW_TYPE.EXTEND_EQUIPMENT, 1, {}, { equipmentId: id });
+    const prompt = await ctx.reply('На сколько дней продлить срок? Введите число:', buildBackKeyboard());
+    ctx.session.flow.promptMessage = rememberMessage(prompt);
+  }, 'extend'));
 
   // Return equipment
   bot.action(/return_(\d+)/, safe(async (ctx) => {

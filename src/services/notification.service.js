@@ -5,6 +5,7 @@ const { bullRedis } = require('../redis');
 const { config } = require('../config');
 const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
+const { findDueEquipment } = require('./equipment.service');
 const { getUsersByRole } = require('../repositories/user.repo');
 const { formatDate } = require('../utils/formatters');
 
@@ -22,6 +23,19 @@ function buildOverdueMessage(items, overdueDays, isForUser = false) {
     ? `⚠️ У вас есть просроченное оборудование (более ${overdueDays} дней):`
     : `⚠️ Оборудование не возвращено более ${overdueDays} дней:`;
   return `${prefix}\n\n${lines.join('\n\n')}`;
+}
+
+function buildDueMessage(item, isForUser = false) {
+  const name = `${item.category || '-'} ${item.model || '-'} (${item.serial_number || `#${item.id}`})`;
+  const now = new Date();
+  const due = new Date(item.due_date);
+  const isOverdue = due <= now;
+  if (isForUser) {
+    const status = isOverdue ? '⏰ Срок сдачи истёк!' : '⏰ Срок сдачи истекает сегодня!';
+    return `${status}\n\n• ${name}\n  Срок: ${formatDate(item.due_date)}\n\nВерните оборудование или нажмите кнопку ниже чтобы продлить срок.`;
+  }
+  const status = isOverdue ? 'Срок истёк' : 'Срок истекает сегодня';
+  return `⏰ ${status}:\n\n• ${name}\n  Срок: ${formatDate(item.due_date)}`;
 }
 
 /**
@@ -44,42 +58,79 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
 
   async function runCheck() {
     try {
+      // ── Overdue by global threshold ───────────────────────────────────────
       const overdueItems = await findOverdueEquipment(overdueDays);
-      if (overdueItems.length === 0) {
-        logger.info('Overdue check: no overdue items');
-        return;
-      }
-      logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
+      if (overdueItems.length > 0) {
+        logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
 
-      // Get all admin IDs: env + role-based
-      const roleAdmins = await getUsersByRole('admin');
-      const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => u.telegram_user_id)])];
+        const roleAdmins = await getUsersByRole('admin');
+        const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => u.telegram_user_id)])];
 
-      // Send to admins
-      const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false);
-      await notificationQueue.add(
-        'sendOverdueAdmins',
-        { recipients: allAdminIds, message: adminMessage },
-        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-      );
-
-      // Group by user and send to each user (excluding admins)
-      const itemsByUser = overdueItems.reduce((acc, item) => {
-        const userId = item.current_holder_user_id;
-        if (!acc[userId]) acc[userId] = [];
-        acc[userId].push(item);
-        return acc;
-      }, {});
-
-      for (const [userId, userItems] of Object.entries(itemsByUser)) {
-        // Skip if user is an admin
-        if (allAdminIds.includes(Number(userId))) continue;
-        const userMessage = buildOverdueMessage(userItems, overdueDays, true);
+        const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false);
         await notificationQueue.add(
-          'sendOverdueUser',
-          { recipients: [Number(userId)], message: userMessage },
+          'sendOverdueAdmins',
+          { recipients: allAdminIds, message: adminMessage },
           { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
         );
+
+        const itemsByUser = overdueItems.reduce((acc, item) => {
+          const userId = item.current_holder_user_id;
+          if (!acc[userId]) acc[userId] = [];
+          acc[userId].push(item);
+          return acc;
+        }, {});
+
+        for (const [userId, userItems] of Object.entries(itemsByUser)) {
+          if (allAdminIds.includes(Number(userId))) continue;
+          const userMessage = buildOverdueMessage(userItems, overdueDays, true);
+          await notificationQueue.add(
+            'sendOverdueUser',
+            { recipients: [Number(userId)], message: userMessage },
+            { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+          );
+        }
+      } else {
+        logger.info('Overdue check: no overdue items');
+      }
+
+      // ── Due date check ────────────────────────────────────────────────────
+      const dueItems = await findDueEquipment();
+      if (dueItems.length > 0) {
+        logger.info({ count: dueItems.length }, `Due date check: ${dueItems.length} items due`);
+
+        const roleAdmins2 = await getUsersByRole('admin');
+        const allAdminIds2 = [...new Set([...envAdminIds, ...roleAdmins2.map(u => u.telegram_user_id)])];
+
+        for (const item of dueItems) {
+          const userId = Number(item.current_holder_user_id);
+
+          // Notify user with extend button
+          const userMessage = buildDueMessage(item, true);
+          await notificationQueue.add(
+            'sendDueUser',
+            {
+              recipients: [userId],
+              message: userMessage,
+              replyMarkup: {
+                inline_keyboard: [[{ text: '🔄 Продлить срок', callback_data: `extend_${item.id}` }]],
+              },
+            },
+            { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+          );
+
+          // Notify admins (without extend button)
+          const adminIds = allAdminIds2.filter(id => id !== userId);
+          if (adminIds.length > 0) {
+            const adminMessage = buildDueMessage(item, false);
+            await notificationQueue.add(
+              'sendDueAdmins',
+              { recipients: adminIds, message: adminMessage },
+              { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+            );
+          }
+        }
+      } else {
+        logger.info('Due date check: no items due');
       }
     } catch (err) {
       logger.error({ err: err.message }, 'Overdue check failed');

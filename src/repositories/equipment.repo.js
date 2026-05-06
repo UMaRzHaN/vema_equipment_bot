@@ -146,7 +146,7 @@ async function updateEquipmentStatus(data) {
 }
 
 async function updateEquipmentDetails(data) {
-  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'notes', 'warehouse'];
+  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'notes', 'warehouse', 'due_date'];
   const parts = [];
   const values = [];
   let idx = 1;
@@ -212,9 +212,11 @@ async function atomicStatusChange(statusData, historyData) {
       historyData.from_status ?? null,
     ];
 
-    if (Object.prototype.hasOwnProperty.call(statusData, 'warehouse')) {
-      setParts.push(`warehouse = $6`);
-      values.push(statusData.warehouse);
+    for (const field of ['warehouse', 'due_date']) {
+      if (Object.prototype.hasOwnProperty.call(statusData, field)) {
+        const idx = values.push(statusData[field]);
+        setParts.push(`${field} = $${idx}`);
+      }
     }
 
     const updateResult = await client.query(
@@ -246,6 +248,18 @@ async function atomicStatusChange(statusData, historyData) {
       ],
     );
   });
+}
+
+async function getDueEquipment() {
+  const result = await query(
+    `SELECT e.id, e.category, e.brand, e.model, e.serial_number,
+            e.current_holder_user_id, e.due_date
+     FROM equipment e
+     WHERE e.status = 'у пользователя'
+       AND e.due_date IS NOT NULL
+       AND e.due_date <= NOW() + INTERVAL '1 day'`,
+  );
+  return result.rows;
 }
 
 async function getSuggestionsForField(field, category = null) {
@@ -281,6 +295,7 @@ module.exports = {
   findEquipmentBySerial,
   getAllEquipment,
   getDistinctCategories,
+  getDueEquipment,
   getEquipmentByCategoryName,
   getEquipmentPage,
   getEquipmentStats,

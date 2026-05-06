@@ -8,13 +8,15 @@ const { validateEquipmentCreate, validateEquipmentUpdate } = require('../validat
 const { buildBackKeyboard, mainMenu } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
 const { ensureSession, resetFlow } = require('../utils');
-const { FLOW_TYPE, ADD_STEP, EDIT_STEP, TOTAL_ADD_STEPS } = require('../fsm/states');
+const { FLOW_TYPE, ADD_STEP, EDIT_STEP, GIVE_STEP, TOTAL_ADD_STEPS } = require('../fsm/states');
 const { makeFlow } = require('../fsm/session.schema');
 const {
   STATUS,
   addEquipment,
+  extendEquipmentDueDate,
   findEquipmentById,
   findEquipmentBySerial,
+  giveEquipmentToUser,
   startRepair,
   updateEquipment,
   writeOffEquipment,
@@ -26,6 +28,7 @@ const {
   getEquipmentSuggestionText,
   normalizeOptionalValue,
 } = require('../helpers/equipmentHints');
+const { formatDate } = require('../../utils/formatters');
 const { equipmentActionsTotal } = require('../../utils/metrics');
 
 const MAX_INPUT = 500;
@@ -332,6 +335,72 @@ async function handleEditEquipment(ctx, text, flow) {
   }
 }
 
+// ── Give Equipment flow ───────────────────────────────────────────────────────
+async function handleGiveEquipment(ctx, text, flow) {
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'give:prompt');
+    resetFlow(ctx);
+    return ctx.reply('Взятие отменено.', mainMenu(ctx));
+  }
+
+  const days = parseInt(text, 10);
+  if (!days || days < 1 || days > 365) {
+    return ctx.reply('Введите количество дней от 1 до 365:');
+  }
+
+  const equipment = await findEquipmentById(flow.equipmentId);
+  if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.', mainMenu(ctx)); }
+  if (equipment.status !== STATUS.IN_STOCK) {
+    resetFlow(ctx);
+    return ctx.reply('Оборудование уже недоступно для выдачи.', mainMenu(ctx));
+  }
+
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + days);
+
+  try {
+    const updated = await giveEquipmentToUser(equipment, ctx.from.id, dueDate.toISOString());
+    equipmentActionsTotal.inc({ action: 'given' });
+    const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+
+    await safeDelete(ctx, flow.sourceMessage, 'give:source');
+    await safeDelete(ctx, flow.promptMessage,  'give:prompt');
+    resetFlow(ctx);
+
+    await ctx.reply(`✅ Оборудование выдано. Срок сдачи: ${formatDate(dueDate)}`, mainMenu(ctx));
+    return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+  } catch (err) {
+    if (err.code === 'STATUS_CONFLICT') {
+      resetFlow(ctx);
+      return ctx.reply('Оборудование уже недоступно — кто-то взял его раньше.', mainMenu(ctx));
+    }
+    throw err;
+  }
+}
+
+// ── Extend due date flow ──────────────────────────────────────────────────────
+async function handleExtendEquipment(ctx, text, flow) {
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'extend:prompt');
+    resetFlow(ctx);
+    return ctx.reply('Продление отменено.', mainMenu(ctx));
+  }
+
+  const days = parseInt(text, 10);
+  if (!days || days < 1 || days > 365) {
+    return ctx.reply('Введите количество дней от 1 до 365:');
+  }
+
+  const equipment = await findEquipmentById(flow.equipmentId);
+  if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.', mainMenu(ctx)); }
+
+  const updated = await extendEquipmentDueDate(equipment, days);
+  await safeDelete(ctx, flow.promptMessage, 'extend:prompt');
+  resetFlow(ctx);
+
+  return ctx.reply(`✅ Срок продлён до ${formatDate(updated.due_date)}`, mainMenu(ctx));
+}
+
 // ── Main FSM router ───────────────────────────────────────────────────────────
 function registerFlowHandlers(bot) {
   bot.on('location', safe(async (ctx, next) => {
@@ -356,6 +425,8 @@ function registerFlowHandlers(bot) {
 
     switch (flow.type) {
       case FLOW_TYPE.ADD_EQUIPMENT:      return handleAddEquipment(ctx, text, flow);
+      case FLOW_TYPE.GIVE_EQUIPMENT:     return handleGiveEquipment(ctx, text, flow);
+      case FLOW_TYPE.EXTEND_EQUIPMENT:   return handleExtendEquipment(ctx, text, flow);
       case FLOW_TYPE.REPAIR:             return handleRepair(ctx, text, flow);
       case FLOW_TYPE.WRITEOFF:           return handleWriteoff(ctx, text, flow);
       case FLOW_TYPE.EDIT_EQUIPMENT:     return handleEditEquipment(ctx, text, flow);

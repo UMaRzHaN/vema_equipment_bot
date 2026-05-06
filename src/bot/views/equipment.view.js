@@ -52,13 +52,14 @@ async function renderEquipmentCard(item) {
   const commentLine   = repairComment ? `Комментарий к ремонту: ${repairComment}\n` : '';
 
   const warehouseLabel = item.warehouse ? `Склад: ${item.warehouse}\n` : '';
+  const dueDateLabel   = item.due_date  ? `Срок сдачи: ${formatDate(item.due_date)}\n` : '';
   return `#${item.position || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
 
 Статус: ${statusLabel(item.status)}
 ${warehouseLabel}Пользователь: ${user}
-
+${dueDateLabel}
 Дата выдачи: ${formatDate(item.current_issue_date)}
-Дата сдачи: ${formatDate(timeline.lastReturnDate)}
+Последняя сдача: ${formatDate(timeline.lastReturnDate)}
 Дата ремонта: ${formatDate(timeline.lastRepairDate)}
 ${commentLine}`;
 }
