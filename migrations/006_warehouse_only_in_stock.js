@@ -1,13 +1,11 @@
 'use strict';
 
 exports.up = (pgm) => {
-  // Clean up stale data before adding the constraint
-  pgm.sql(`UPDATE equipment SET warehouse = NULL WHERE status != 'на складе'`);
-
-  // Drop NOT NULL and default — warehouse is only meaningful when in stock
+  // Drop NOT NULL and default first, then clean data, then add constraint
   pgm.alterColumn('equipment', 'warehouse', { notNull: false, default: null });
 
-  // Enforce at DB level: warehouse must be NULL when not in stock
+  pgm.sql(`UPDATE equipment SET warehouse = NULL WHERE status != 'на складе'`);
+
   pgm.addConstraint('equipment', 'chk_warehouse_only_in_stock',
     `CHECK (status = 'на складе' OR warehouse IS NULL)`);
 };
