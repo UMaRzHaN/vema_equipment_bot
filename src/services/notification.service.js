@@ -1,7 +1,7 @@
 'use strict';
 
 const { Queue } = require('bullmq');
-const { bullRedis } = require('../redis');
+const { bullRedis, redis } = require('../redis');
 const logger = require('../utils/logger');
 const { findOverdueEquipment } = require('./history.service');
 const { findDueEquipment } = require('./equipment.service');
@@ -73,11 +73,17 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
   let intervalHandle = null;
 
   async function runCheck() {
-    // Slot: YYYY-MM-DD-HH rounded to 12h window — prevents duplicate jobs on restart
     const now = new Date();
     const slot = `${now.toISOString().slice(0, 10)}-${now.getUTCHours() < 12 ? '00' : '12'}`;
+    const sentKey = `notif-sent:${slot}`;
 
     try {
+      // Skip if already sent in this 12h window (survives restarts)
+      const alreadySent = await redis.get(sentKey);
+      if (alreadySent) {
+        logger.info({ slot }, 'Notifications already sent for this slot, skipping');
+        return;
+      }
       // ── Overdue by global threshold ───────────────────────────────────────
       const overdueItems = await findOverdueEquipment(overdueDays);
       if (overdueItems.length > 0) {
@@ -164,6 +170,9 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
       } else {
         logger.info('Due date check: no items due');
       }
+
+      // Mark this slot as done — 13h TTL so it expires before the next check cycle
+      await redis.set(sentKey, '1', 'EX', 13 * 60 * 60);
     } catch (err) {
       logger.error({ err: err.message }, 'Overdue check failed');
     }
