@@ -51,10 +51,11 @@ async function renderEquipmentCard(item) {
   const repairComment = await getLastRepairComment(item.id);
   const commentLine   = repairComment ? `Комментарий к ремонту: ${repairComment}\n` : '';
 
+  const warehouseLabel = item.warehouse ? `Склад: ${item.warehouse}\n` : '';
   return `#${item.position || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
 
 Статус: ${statusLabel(item.status)}
-Пользователь: ${user}
+${warehouseLabel}Пользователь: ${user}
 
 Дата выдачи: ${formatDate(item.current_issue_date)}
 Дата сдачи: ${formatDate(timeline.lastReturnDate)}

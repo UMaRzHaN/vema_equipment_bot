@@ -63,14 +63,15 @@ async function createCategoryImage(categoryName, items) {
   const rowHeight = 34;
   const padding = 24;
   const columns = [
-    { title: '№',           width: 70  },
-    { title: 'Оборудование', width: 360 },
-    { title: 'Статус',      width: 130 },
-    { title: 'Пользователь', width: 180 },
-    { title: 'Выдано',      width: 160 },
-    { title: 'Сдано',       width: 160 },
-    { title: 'Ремонт',      width: 160 },
-    { title: 'Комментарий', width: 250 },
+    { title: '№',           width: 60  },
+    { title: 'Оборудование', width: 320 },
+    { title: 'Склад',       width: 140 },
+    { title: 'Статус',      width: 120 },
+    { title: 'Пользователь', width: 170 },
+    { title: 'Выдано',      width: 140 },
+    { title: 'Сдано',       width: 140 },
+    { title: 'Ремонт',      width: 140 },
+    { title: 'Комментарий', width: 220 },
   ];
 
   const width  = columns.reduce((s, c) => s + c.width, 0) + padding * 2;
@@ -113,6 +114,7 @@ async function createCategoryImage(categoryName, items) {
     const rowVals = [
       String(idx + 1),
       `${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
+      item.warehouse || 'Ташкент',
       statusLabel(item.status),
       holder,
       formatDate(item.current_issue_date),
@@ -129,6 +131,34 @@ async function createCategoryImage(categoryName, items) {
     }
     y += rowHeight;
   }
+
+  const chunks = [];
+  const writable = new Writable({ write(chunk, _, cb) { chunks.push(Buffer.from(chunk)); cb(); } });
+  await PImage.encodePNGToStream(image, writable);
+  return Buffer.concat(chunks);
+}
+
+async function createWarehouseImage(city) {
+  await getReportFont();
+
+  const padding = 24;
+  const width = 760;
+  const height = 220;
+  const image = PImage.make(width, height);
+  const ctx = image.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = '#f7f7f7';
+  ctx.fillRect(padding, padding, width - padding * 2, height - padding * 2);
+  ctx.fillStyle = '#000000';
+  ctx.font = '22pt ReportFont';
+  const label = `Склад: ${city}`;
+  ctx.fillText(label, padding + 6, padding + 60);
+
+  const subtitle = 'Оборудование возвращено на склад';
+  ctx.font = '14pt ReportFont';
+  ctx.fillText(subtitle, padding + 6, padding + 110);
 
   const chunks = [];
   const writable = new Writable({ write(chunk, _, cb) { chunks.push(Buffer.from(chunk)); cb(); } });
@@ -154,6 +184,7 @@ async function buildCategoryXlsx(categoryName, items) {
     { header: 'Категория',       key: 'category',              width: 20 },
     { header: 'Бренд',           key: 'brand',                 width: 24 },
     { header: 'Модель',          key: 'model',                 width: 18 },
+    { header: 'Склад',           key: 'warehouse',             width: 18 },
     { header: 'Серийный номер',  key: 'serial_number',         width: 18 },
     { header: 'Дата покупки',    key: 'purchase_date',         width: 18 },
     { header: 'Статус',          key: 'status',                width: 14 },
@@ -187,6 +218,7 @@ async function buildCategoryXlsx(categoryName, items) {
       brand:              item.brand || '',
       model:              item.model || '',
       serial_number:      item.serial_number || '',
+      warehouse:          item.warehouse || 'Ташкент',
       purchase_date:      formatDateOnly(item.purchase_date),
       status:             statusLabel(item.status),
       holder,
@@ -200,4 +232,4 @@ async function buildCategoryXlsx(categoryName, items) {
   return workbook.xlsx.writeBuffer();
 }
 
-module.exports = { buildCategoryXlsx, buildSummaryText, createCategoryImage };
+module.exports = { buildCategoryXlsx, buildSummaryText, createCategoryImage, createWarehouseImage };

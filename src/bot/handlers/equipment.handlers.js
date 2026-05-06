@@ -135,12 +135,12 @@ function registerEquipmentHandlers(bot) {
     if (Number(item.current_holder_user_id) !== ctx.from.id) {
       await ctx.answerCbQuery('Это оборудование выдано другому пользователю.', { show_alert: true }); return;
     }
-    await ctx.answerCbQuery('✅ Возвращено');
-    const updated = await returnEquipmentFromUser(item, ctx.from.id);
-    equipmentActionsTotal.inc({ action: 'returned' });
-    const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
-    const text   = await renderEquipmentCard(updated);
-    return markup ? ctx.editMessageText(text, markup) : ctx.editMessageText(text);
+
+    await ctx.answerCbQuery();
+    ensureSession(ctx);
+    ctx.session.flow = makeFlow(FLOW_TYPE.RETURN_LOCATION, 1, { equipmentId: id }, { sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
+    const prompt = await ctx.reply('Отправьте локацию склада или введите город вручную:');
+    ctx.session.flow.promptMessage = rememberMessage(prompt);
   }, 'return'));
 
   // Send to repair

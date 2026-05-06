@@ -119,11 +119,24 @@ function wrapStatusConflict(err) {
   return err;
 }
 
-async function returnEquipmentFromUser(equipment, userId) {
+async function returnEquipmentFromUser(equipment, userId, warehouse) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
-      { equipment_id: equipment.id, action: 'возвращено', from_status: STATUS.WITH_USER, to_status: STATUS.IN_STOCK, from_user_id: userId, performed_by_user_id: userId },
+      {
+        id: equipment.id,
+        status: STATUS.IN_STOCK,
+        current_holder_user_id: null,
+        current_issue_date: null,
+        warehouse: warehouse || 'Ташкент',
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'возвращено',
+        from_status: STATUS.WITH_USER,
+        to_status: STATUS.IN_STOCK,
+        from_user_id: userId,
+        performed_by_user_id: userId,
+      },
     );
   } catch (err) { throw wrapStatusConflict(err); }
   return findEquipmentById(equipment.id);

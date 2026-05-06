@@ -17,7 +17,10 @@ const {
   startRepair,
   updateEquipment,
   writeOffEquipment,
+  returnEquipmentFromUser,
 } = require('../../services/equipment.service');
+const { createWarehouseImage } = require('../../services/report.service');
+const { getCityByCoordinates } = require('../../services/location.service');
 const {
   getEquipmentSuggestionText,
   normalizeOptionalValue,
@@ -179,6 +182,61 @@ async function handleRepair(ctx, text, flow) {
   return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
 }
 
+async function handleReturnLocation(ctx, text, flow) {
+  const equipment = await findEquipmentById(flow.equipmentId);
+  if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
+
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'return:prompt');
+    resetFlow(ctx);
+    return ctx.reply('Возврат отменён.', mainMenu(ctx));
+  }
+
+  const warehouse = text?.trim();
+  if (!warehouse) {
+    return ctx.reply('Введите город склада, куда возвращаете оборудование:');
+  }
+
+  const updated = await returnEquipmentFromUser(equipment, ctx.from.id, warehouse);
+  equipmentActionsTotal.inc({ action: 'returned' });
+  const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+
+  await safeDelete(ctx, flow.sourceMessage, 'return:source');
+  await safeDelete(ctx, flow.promptMessage, 'return:prompt');
+  resetFlow(ctx);
+
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`);
+  const img = await createWarehouseImage(warehouse);
+  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${warehouse}.png` }, { caption: `Склад: ${warehouse}` });
+  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+}
+
+async function handleReturnLocationWithGeo(ctx, flow) {
+  const equipment = await findEquipmentById(flow.equipmentId);
+  if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
+
+  const location = ctx.message.location;
+  if (!location) return ctx.reply('Пожалуйста, отправьте локацию склада или введите город вручную.');
+
+  const city = await getCityByCoordinates(location.latitude, location.longitude);
+  if (!city) {
+    return ctx.reply('Не удалось определить город по локации. Введите город склада вручную:');
+  }
+
+  const updated = await returnEquipmentFromUser(equipment, ctx.from.id, city);
+  equipmentActionsTotal.inc({ action: 'returned' });
+  const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+
+  await safeDelete(ctx, flow.sourceMessage, 'return:source');
+  await safeDelete(ctx, flow.promptMessage, 'return:prompt');
+  resetFlow(ctx);
+
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`);
+  const img = await createWarehouseImage(city);
+  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${city}.png` }, { caption: `Склад: ${city}` });
+  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+}
+
 // ── Write-off flow ────────────────────────────────────────────────────────────
 async function handleWriteoff(ctx, text, flow) {
   const equipment = await findEquipmentById(flow.equipmentId);
@@ -272,6 +330,13 @@ async function handleEditEquipment(ctx, text, flow) {
 
 // ── Main FSM router ───────────────────────────────────────────────────────────
 function registerFlowHandlers(bot) {
+  bot.on('location', safe(async (ctx, next) => {
+    ensureSession(ctx);
+    const flow = ctx.session.flow;
+    if (!flow || flow.type !== FLOW_TYPE.RETURN_LOCATION) return next();
+    return handleReturnLocationWithGeo(ctx, flow);
+  }, 'flow:location'));
+
   bot.on('text', safe(async (ctx, next) => {
     const text = (ctx.message?.text || '').trim();
     if (text.startsWith('/')) return next();
@@ -286,10 +351,11 @@ function registerFlowHandlers(bot) {
     if (MENU_LABELS.includes(text)) { resetFlow(ctx); return next(); }
 
     switch (flow.type) {
-      case FLOW_TYPE.ADD_EQUIPMENT:  return handleAddEquipment(ctx, text, flow);
-      case FLOW_TYPE.REPAIR:         return handleRepair(ctx, text, flow);
-      case FLOW_TYPE.WRITEOFF:       return handleWriteoff(ctx, text, flow);
-      case FLOW_TYPE.EDIT_EQUIPMENT: return handleEditEquipment(ctx, text, flow);
+      case FLOW_TYPE.ADD_EQUIPMENT:      return handleAddEquipment(ctx, text, flow);
+      case FLOW_TYPE.REPAIR:             return handleRepair(ctx, text, flow);
+      case FLOW_TYPE.WRITEOFF:           return handleWriteoff(ctx, text, flow);
+      case FLOW_TYPE.EDIT_EQUIPMENT:     return handleEditEquipment(ctx, text, flow);
+      case FLOW_TYPE.RETURN_LOCATION:    return handleReturnLocation(ctx, text, flow);
       default:
         resetFlow(ctx);
         return next();

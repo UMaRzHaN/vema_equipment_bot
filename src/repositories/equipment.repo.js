@@ -146,7 +146,7 @@ async function updateEquipmentStatus(data) {
 }
 
 async function updateEquipmentDetails(data) {
-  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'notes'];
+  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'notes', 'warehouse'];
   const parts = [];
   const values = [];
   let idx = 1;
@@ -199,21 +199,31 @@ async function getEquipmentStats() {
  */
 async function atomicStatusChange(statusData, historyData) {
   return transaction(async (client) => {
+    const setParts = [
+      'status = $1',
+      'current_holder_user_id = $2',
+      'current_issue_date = $3',
+    ];
+    const values = [
+      statusData.status,
+      statusData.current_holder_user_id ?? null,
+      statusData.current_issue_date ?? null,
+      statusData.id,
+      historyData.from_status ?? null,
+    ];
+
+    if (Object.prototype.hasOwnProperty.call(statusData, 'warehouse')) {
+      setParts.push(`warehouse = $6`);
+      values.push(statusData.warehouse);
+    }
+
     const updateResult = await client.query(
       `UPDATE equipment
-       SET status = $1,
-           current_holder_user_id = $2,
-           current_issue_date = $3,
+       SET ${setParts.join(', ')},
            updated_at = NOW()
        WHERE id = $4
          AND ($5::text IS NULL OR status = $5)`,
-      [
-        statusData.status,
-        statusData.current_holder_user_id ?? null,
-        statusData.current_issue_date ?? null,
-        statusData.id,
-        historyData.from_status ?? null,
-      ],
+      values,
     );
     if (updateResult.rowCount === 0) {
       throw Object.assign(new Error('STATUS_CONFLICT'), { code: 'STATUS_CONFLICT' });
