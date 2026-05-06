@@ -68,7 +68,7 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
         logger.info({ count: overdueItems.length }, `Overdue check: ${overdueItems.length} overdue items`);
 
         const roleAdmins = await getUsersByRole('admin');
-        const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => u.telegram_user_id)])];
+        const allAdminIds = [...new Set([...envAdminIds, ...roleAdmins.map(u => Number(u.telegram_user_id))])];
 
         const adminMessage = buildOverdueMessage(overdueItems, overdueDays, false);
         await notificationQueue.add(
