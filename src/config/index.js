@@ -8,7 +8,7 @@ const { z } = require('zod');
 const envSchema = z.object({
   // Telegram
   BOT_TOKEN:      z.string().min(10, 'BOT_TOKEN is required'),
-  WEBHOOK_URL:    z.string().url('WEBHOOK_URL must be a valid HTTPS URL').optional(),
+  WEBHOOK_URL:    z.preprocess((v) => v || undefined, z.string().url('WEBHOOK_URL must be a valid HTTPS URL').optional()),
   WEBHOOK_SECRET: z.string().min(8).default('webhook-secret-not-set'),
   ADMIN_IDS:      z.string().optional(),
 
