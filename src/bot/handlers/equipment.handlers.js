@@ -151,7 +151,7 @@ function registerEquipmentHandlers(bot) {
 
     await ctx.answerCbQuery();
     ensureSession(ctx);
-    ctx.session.flow = makeFlow(FLOW_TYPE.RETURN_LOCATION, 1, { equipmentId: id }, { sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
+    ctx.session.flow = makeFlow(FLOW_TYPE.RETURN_LOCATION, 1, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
     const prompt = await ctx.reply(
       'Отправьте вашу локацию или введите название города вручную:',
       buildLocationRequestKeyboard(),
