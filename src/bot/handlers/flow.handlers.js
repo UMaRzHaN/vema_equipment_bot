@@ -25,7 +25,6 @@ const {
   listAllEquipment,
   startRepair,
   updateEquipment,
-  writeOffEquipment,
   returnEquipmentFromUser,
 } = require('../../services/equipment.service');
 const { getCityByCoordinates } = require('../../services/location.service');
@@ -78,9 +77,13 @@ function mergeWithBackKeyboard(options) {
 
 async function sendAddPrompt(ctx, step) {
   const category = ctx.session?.flow?.data?.category || null;
+  const brand = ctx.session?.flow?.data?.brand || null;
   switch (step) {
     case ADD_STEP.CATEGORY: {
-      const prompt = await getEquipmentSuggestionText('category', `${stepLabel(step)} Введите категорию:`);
+      const prompt = await getEquipmentSuggestionText(
+        'category',
+        `${stepLabel(step)} Введите категорию оборудования:`,
+      );
       return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.BRAND: {
@@ -88,7 +91,12 @@ async function sendAddPrompt(ctx, step) {
       return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.MODEL: {
-      const prompt = await getEquipmentSuggestionText('model', `${stepLabel(step)} Введите модель:`, category);
+      const prompt = await getEquipmentSuggestionText(
+        'model',
+        `${stepLabel(step)} Введите модель:`,
+        category,
+        brand,
+      );
       return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.SERIAL:
@@ -118,6 +126,21 @@ async function safeDelete(ctx, ref, label) {
   } catch (err) {
     logger.warn({ label, err: err.message }, 'safeDelete failed');
   }
+}
+
+function getSelectedMyEquipmentItems(allItems, flow, userId) {
+  const selectedIds = new Set(
+    (Array.isArray(flow?.equipmentIds) ? flow.equipmentIds : [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0),
+  );
+
+  if (!selectedIds.size) return [];
+
+  return allItems.filter((item) =>
+    selectedIds.has(Number(item.id))
+    && item.status === STATUS.WITH_USER
+    && Number(item.current_holder_user_id) === Number(userId));
 }
 
 async function finalizeAddEquipment(ctx, data) {
@@ -233,10 +256,7 @@ async function handleGiveDuration(ctx, text, flow) {
     }
 
     const allItems = await listAllEquipment();
-    const items = allItems.filter((item) =>
-      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
-      && item.status === STATUS.WITH_USER
-      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+    const items = getSelectedMyEquipmentItems(allItems, flow, ctx.from.id);
 
     if (!items.length) {
       resetFlow(ctx);
@@ -298,7 +318,10 @@ async function handleGiveDuration(ctx, text, flow) {
     await safeDelete(ctx, flow.promptMessage, 'extend:prompt');
     resetFlow(ctx);
 
-    await ctx.reply(`⏳ Продлено на ${durationDays} дн. Новый срок: ${formatDate(nextDate.toISOString())}`);
+    await ctx.reply(
+      `⏳ Продлено на ${durationDays} дн. Новый срок: ${formatDate(nextDate.toISOString())}`,
+      mainMenu(ctx),
+    );
     return ctx.reply(await renderEquipmentCard(updated), markup || mainMenu(ctx));
   }
 
@@ -412,10 +435,7 @@ async function handleReturnLocation(ctx, text, flow) {
     }
 
     const allItems = await listAllEquipment();
-    const items = allItems.filter((item) =>
-      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
-      && item.status === STATUS.WITH_USER
-      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+    const items = getSelectedMyEquipmentItems(allItems, flow, ctx.from.id);
 
     if (!items.length) {
       resetFlow(ctx);
@@ -479,10 +499,7 @@ async function handleReturnLocationWithGeo(ctx, flow) {
     }
 
     const allItems = await listAllEquipment();
-    const items = allItems.filter((item) =>
-      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
-      && item.status === STATUS.WITH_USER
-      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+    const items = getSelectedMyEquipmentItems(allItems, flow, ctx.from.id);
 
     if (!items.length) {
       resetFlow(ctx);
@@ -530,26 +547,6 @@ async function handleReturnLocationWithGeo(ctx, flow) {
     return ctx.reply(await renderEquipmentCard(updated), markup);
   }
   return ctx.reply(await renderEquipmentCard(updated));
-}
-
-async function handleWriteoff(ctx, text, flow) {
-  const equipment = await findEquipmentById(flow.equipmentId);
-  if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
-
-  const comment = text === '—' ? null : text;
-  const updated = await writeOffEquipment(equipment, ctx.from.id, comment);
-  equipmentActionsTotal.inc({ action: 'written_off' });
-  const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
-
-  await safeDelete(ctx, flow.sourceMessage, 'writeoff:source');
-  await safeDelete(ctx, flow.promptMessage, 'writeoff:prompt');
-  resetFlow(ctx);
-  await ctx.reply(`Оборудование списано:\n${equipment.category} ${equipment.model} - ${equipment.serial_number}`);
-  if (markup) {
-    return ctx.reply(await renderEquipmentCard(updated), markup);
-  } else {
-    return ctx.reply(await renderEquipmentCard(updated), mainMenu(ctx));
-  }
 }
 
 async function handleEditEquipment(ctx, text, flow) {
@@ -688,8 +685,6 @@ function registerFlowHandlers(bot) {
         return ctx.reply('Для выбора комплектующих используйте кнопки под сообщением.');
       case FLOW_TYPE.REPAIR:
         return handleRepair(ctx, text, flow);
-      case FLOW_TYPE.WRITEOFF:
-        return handleWriteoff(ctx, text, flow);
       case FLOW_TYPE.EDIT_EQUIPMENT:
         return handleEditEquipment(ctx, text, flow);
       case FLOW_TYPE.RETURN_LOCATION:

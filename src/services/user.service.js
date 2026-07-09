@@ -40,7 +40,6 @@ async function getUserByTelegramId(telegramId) {
   return findUserByTelegramId(telegramId);
 }
 
-// Returns Map<telegramId, user> for batch lookups
 async function getUsersByTelegramIds(telegramIds) {
   const users = await findUsersByTelegramIds(telegramIds);
   return new Map(users.map((u) => [String(u.telegram_user_id), u]));
@@ -51,7 +50,7 @@ function isUserProfileComplete(user) {
 }
 
 function formatUser(user) {
-  if (!user) return '—';
+  if (!user) return '-';
   const parts = [user.first_name, user.last_name].filter(Boolean);
   if (parts.length) return parts.join(' ');
   if (user.username) return `@${user.username}`;
@@ -75,7 +74,7 @@ async function deleteUserAccount(telegramUserId) {
   const active = await hasActiveEquipment(telegramUserId);
   if (active) {
     throw Object.assign(
-      new Error('Верните всё оборудование перед удалением профиля.'),
+      new Error('Верните все оборудование перед удалением профиля.'),
       { code: 'HAS_EQUIPMENT' },
     );
   }

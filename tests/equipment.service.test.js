@@ -51,6 +51,17 @@ describe('giveEquipmentToUser', () => {
     assert.equal(equipUpdate.warehouse, null);
   });
 
+  it('writes correct history payload for issuance', async () => {
+    await service.giveEquipmentToUser({ id: 1, status: 'на складе' }, 42, [{ name: 'Кабель', qty: 1 }], '2026-07-20T00:00:00.000Z');
+    const [, historyEntry] = state.atomicCalls[0];
+    assert.equal(historyEntry.equipment_id, 1);
+    assert.equal(historyEntry.action, 'выдано');
+    assert.equal(historyEntry.from_status, 'на складе');
+    assert.equal(historyEntry.to_status, 'у пользователя');
+    assert.equal(historyEntry.to_user_id, 42);
+    assert.equal(historyEntry.performed_by_user_id, 42);
+  });
+
   it('returns refreshed item from findEquipmentById', async () => {
     const result = await service.giveEquipmentToUser({ id: 1, status: 'на складе' }, 42);
     assert.equal(result.status, 'у пользователя');
@@ -71,9 +82,20 @@ describe('returnEquipmentFromUser', () => {
     assert.equal(equipUpdate.status, 'на складе');
     assert.equal(equipUpdate.current_holder_user_id, null);
   });
+
+  it('writes correct history payload for return', async () => {
+    await service.returnEquipmentFromUser({ id: 2, status: 'у пользователя', current_holder_user_id: 7 }, 7, 'Ташкент');
+    const [, historyEntry] = state.atomicCalls[0];
+    assert.equal(historyEntry.equipment_id, 2);
+    assert.equal(historyEntry.action, 'возвращено');
+    assert.equal(historyEntry.from_status, 'у пользователя');
+    assert.equal(historyEntry.to_status, 'на складе');
+    assert.equal(historyEntry.from_user_id, 7);
+    assert.equal(historyEntry.performed_by_user_id, 7);
+  });
 });
 
-// ── repair / write-off transitions ───────────────────────────────────────────
+// ── repair transitions ───────────────────────────────────────────────────────
 describe('non-stock status transitions', () => {
   beforeEach(() => {
     state.atomicCalls = [];
@@ -87,11 +109,69 @@ describe('non-stock status transitions', () => {
     assert.equal(equipUpdate.warehouse, null);
   });
 
-  it('clears warehouse when writing equipment off', async () => {
-    await service.writeOffEquipment({ id: 3, status: 'на складе' }, 42, null);
-    const [equipUpdate] = state.atomicCalls[0];
-    assert.equal(equipUpdate.status, 'списано');
-    assert.equal(equipUpdate.warehouse, null);
+  it('writes correct history payload for repair start', async () => {
+    await service.startRepair({ id: 3, status: 'на складе', current_holder_user_id: 11 }, 42, 'Диагностика');
+    const [, historyEntry] = state.atomicCalls[0];
+    assert.equal(historyEntry.equipment_id, 3);
+    assert.equal(historyEntry.action, 'в ремонте');
+    assert.equal(historyEntry.from_status, 'на складе');
+    assert.equal(historyEntry.to_status, 'в ремонте');
+    assert.equal(historyEntry.from_user_id, 11);
+    assert.equal(historyEntry.performed_by_user_id, 42);
+    assert.equal(historyEntry.comment, 'Диагностика');
+  });
+
+  it('rejects repair start when equipment is not in stock', async () => {
+    await assert.rejects(
+      () => service.startRepair({ id: 3, status: 'у пользователя', current_holder_user_id: 11 }, 42, null),
+      { code: 'REPAIR_ONLY_FROM_STOCK', message: 'Оборудование должно быть на складе.' },
+    );
+    assert.equal(state.atomicCalls.length, 0);
+  });
+
+  it('writes correct history payload for repair completion', async () => {
+    await service.completeRepair({ id: 3, status: 'в ремонте', warehouse: null }, 42);
+    const [equipUpdate, historyEntry] = state.atomicCalls[0];
+    assert.equal(equipUpdate.status, 'на складе');
+    assert.equal(equipUpdate.warehouse, 'Ташкент');
+    assert.equal(historyEntry.equipment_id, 3);
+    assert.equal(historyEntry.action, 'из ремонта');
+    assert.equal(historyEntry.from_status, 'в ремонте');
+    assert.equal(historyEntry.to_status, 'на складе');
+    assert.equal(historyEntry.performed_by_user_id, 42);
+  });
+
+});
+
+describe('extendEquipmentForUser', () => {
+  beforeEach(() => {
+    state.atomicCalls = [];
+    state.findResult = { id: 4, status: 'у пользователя', current_holder_user_id: 7 };
+  });
+
+  it('writes correct history payload for extension', async () => {
+    const expectedReturnDate = '2026-07-20T00:00:00.000Z';
+    await service.extendEquipmentForUser({
+      id: 4,
+      status: 'у пользователя',
+      current_holder_user_id: 7,
+      current_issue_date: '2026-07-10T00:00:00.000Z',
+      components: [{ name: 'Кабель', qty: 1 }],
+      warehouse: null,
+    }, 7, expectedReturnDate);
+
+    const [equipUpdate, historyEntry] = state.atomicCalls[0];
+    assert.equal(equipUpdate.status, 'у пользователя');
+    assert.equal(equipUpdate.expected_return_date, expectedReturnDate);
+    assert.deepEqual(equipUpdate.components, [{ name: 'Кабель', qty: 1 }]);
+    assert.equal(historyEntry.equipment_id, 4);
+    assert.equal(historyEntry.action, 'срок продлен');
+    assert.equal(historyEntry.from_status, 'у пользователя');
+    assert.equal(historyEntry.to_status, 'у пользователя');
+    assert.equal(historyEntry.from_user_id, 7);
+    assert.equal(historyEntry.to_user_id, 7);
+    assert.equal(historyEntry.performed_by_user_id, 7);
+    assert.match(historyEntry.comment, /2026-07-20T00:00:00.000Z/);
   });
 });
 

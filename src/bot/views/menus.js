@@ -26,7 +26,11 @@ function buildUserListKeyboard(users, page, totalPages) {
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ')
       || user.username
       || `#${user.telegram_user_id}`;
-    const roleTag = user.role === 'admin' ? '🛡' : user.role === 'manager' ? '📋' : '👤';
+    const roleTag = user.role === 'admin'
+      ? '🛡'
+      : user.role === 'manager'
+        ? '📋'
+        : '👤';
     return [Markup.button.callback(`${roleTag} ${name}`, `set_role_select_${user.telegram_user_id}`)];
   });
 
@@ -35,11 +39,6 @@ function buildUserListKeyboard(users, page, totalPages) {
   nav.push(Markup.button.callback(`${page + 1}/${totalPages}`, 'noop'));
   if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `users_page_${page + 1}`));
   if (nav.length) rows.push(nav);
-
-  rows.push([
-    Markup.button.callback('⏳ Продлить всё', 'extendAllMy'),
-    Markup.button.callback('↩️ Вернуть всё', 'returnAllMy'),
-  ]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -105,7 +104,6 @@ function buildBrandListKeyboard(categoryName, brands, page, totalPages) {
     rows.push(nav);
   }
 
-  rows.push([Markup.button.callback('↩️ Назад', 'back_categories')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -136,7 +134,7 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
     rows.push(nav);
   }
 
-  rows.push([Markup.button.callback('↩️ Назад', 'back_categories')]);
+  rows.push([Markup.button.callback('↩️ Назад', `back_brandlist_${encodedCategory}`)]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -218,9 +216,47 @@ function buildMyEquipmentKeyboard(items) {
     ),
   ]);
   rows.push([
-    Markup.button.callback('⏳ Продлить всё', 'extendAllMy'),
-    Markup.button.callback('↩️ Вернуть всё', 'returnAllMy'),
+    Markup.button.callback('⏳ Продлить', 'extendAllMy'),
+    Markup.button.callback('↩️ Вернуть', 'returnAllMy'),
   ]);
+  return Markup.inlineKeyboard(rows);
+}
+
+function buildMyEquipmentSelectionKeyboard(items, mode, selectedIds = []) {
+  const selectedSet = new Set((selectedIds || []).map((id) => Number(id)));
+  const allSelected = items.length > 0 && items.every((item) => selectedSet.has(Number(item.id)));
+  const rows = items.map((item) => {
+    const isSelected = selectedSet.has(Number(item.id));
+    const marker = isSelected ? '✅' : '⬜';
+    return [
+      Markup.button.callback(
+        `${marker} ${item.category || '-'} • ${item.model || '-'} - ${item.serial_number || '-'}`,
+        `toggleMyEquipmentSelection_${mode}_${item.id}`,
+      ),
+    ];
+  });
+
+  if (items.length > 1) {
+    rows.push([
+      Markup.button.callback(
+        allSelected ? '☑️ Снять всё' : '✅ Выбрать всё',
+        `toggleAllMyEquipmentSelection_${mode}`,
+      ),
+    ]);
+  }
+
+  rows.push([
+    Markup.button.callback(
+      mode === 'extend'
+        ? '⏳ Продлить выбранное'
+        : '↩️ Вернуть выбранное',
+      `confirmMyEquipmentSelection_${mode}`,
+    ),
+  ]);
+  rows.push([
+    Markup.button.callback('❌ Отмена', 'cancelMyEquipmentSelection'),
+  ]);
+
   return Markup.inlineKeyboard(rows);
 }
 
@@ -235,6 +271,7 @@ module.exports = {
   buildGiveComponentsKeyboard,
   buildLocationRequestKeyboard,
   buildMyEquipmentKeyboard,
+  buildMyEquipmentSelectionKeyboard,
   buildPhoneRequestKeyboard,
   buildRoleSelectKeyboard,
   buildUserListKeyboard,

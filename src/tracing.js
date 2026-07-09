@@ -3,24 +3,24 @@
 /**
  * OpenTelemetry distributed tracing.
  *
- * Включается через OTEL_ENABLED=true в .env
- * При отсутствии — нулевой overhead (модуль не загружается).
+ * Включается через OTEL_ENABLED=true в .env.
+ * При отключении — нулевой overhead: модуль не загружается.
  *
  * Что инструментируется автоматически:
- *   - HTTP запросы (Fastify) → http.server.duration span
- *   - PostgreSQL запросы (pg) → db.postgresql.query span
- *   - Redis операции (ioredis) → db.redis.* span
+ *   - HTTP-запросы (Fastify) -> http.server.duration span
+ *   - PostgreSQL-запросы (pg) -> db.postgresql.query span
+ *   - Redis-операции (ioredis) -> db.redis.* span
  *
  * Экспортёры:
- *   OTEL_EXPORTER=console  → stdout (для разработки / дебага)
- *   OTEL_EXPORTER=otlp     → OTLP HTTP (Jaeger, Grafana Tempo, Honeycomb, etc.)
+ *   OTEL_EXPORTER=console -> stdout (для разработки / дебага)
+ *   OTEL_EXPORTER=otlp    -> OTLP HTTP (Jaeger, Grafana Tempo, Honeycomb, etc.)
  *
  * Переменные для OTLP:
  *   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
  *   OTEL_SERVICE_NAME=vema-equipment-bot
  *
- * ВАЖНО: этот файл должен быть импортирован ПЕРВЫМ в app.js
- * через: require('./tracing');
+ * ВАЖНО: этот файл должен быть импортирован первым в app.js:
+ *   require('./tracing');
  *
  * Установка зависимостей:
  *   npm install \
@@ -32,7 +32,7 @@
  */
 
 if (process.env.OTEL_ENABLED !== 'true') {
-  // OTEL не включён — экспортируем no-op функцию, нулевой overhead
+  // OTEL не включён — экспортируем no-op функцию без лишней нагрузки.
   module.exports = { setup: () => {} };
   return;
 }
@@ -40,8 +40,11 @@ if (process.env.OTEL_ENABLED !== 'true') {
 let sdk;
 
 function setup() {
-  // Lazy require — пакеты не установлены по умолчанию
-  let NodeSDK, getNodeAutoInstrumentations, OTLPTraceExporter, ConsoleSpanExporter, Resource, SEMRESATTRS_SERVICE_NAME;
+  // Lazy require: пакеты не являются обязательными для обычного запуска.
+  let NodeSDK;
+  let getNodeAutoInstrumentations;
+  let Resource;
+  let SEMRESATTRS_SERVICE_NAME;
 
   try {
     ({ NodeSDK } = require('@opentelemetry/sdk-node'));
@@ -58,12 +61,12 @@ function setup() {
   const exporter = (() => {
     const type = process.env.OTEL_EXPORTER || 'otlp';
     if (type === 'console') {
-      const { ConsoleSpanExporter: CSE } = require('@opentelemetry/sdk-trace-base');
-      return new CSE();
+      const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
+      return new ConsoleSpanExporter();
     }
-    // Default: OTLP HTTP
-    const { OTLPTraceExporter: OTE } = require('@opentelemetry/exporter-trace-otlp-http');
-    return new OTE({
+
+    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+    return new OTLPTraceExporter({
       url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT
         ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`
         : 'http://localhost:4318/v1/traces',
@@ -77,13 +80,13 @@ function setup() {
     traceExporter: exporter,
     instrumentations: [
       getNodeAutoInstrumentations({
-        // Инструментируем только нужное — меньше overhead
-        '@opentelemetry/instrumentation-fs':     { enabled: false },
-        '@opentelemetry/instrumentation-dns':    { enabled: false },
-        '@opentelemetry/instrumentation-net':    { enabled: false },
-        '@opentelemetry/instrumentation-http':   { enabled: true  },
-        '@opentelemetry/instrumentation-pg':     { enabled: true  },
-        '@opentelemetry/instrumentation-ioredis':{ enabled: true  },
+        // Инструментируем только нужное, чтобы снизить overhead.
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-dns': { enabled: false },
+        '@opentelemetry/instrumentation-net': { enabled: false },
+        '@opentelemetry/instrumentation-http': { enabled: true },
+        '@opentelemetry/instrumentation-pg': { enabled: true },
+        '@opentelemetry/instrumentation-ioredis': { enabled: true },
       }),
     ],
   });
@@ -91,7 +94,6 @@ function setup() {
   sdk.start();
   console.log(`[tracing] OpenTelemetry started (exporter: ${process.env.OTEL_EXPORTER || 'otlp'})`);
 
-  // Graceful shutdown
   process.on('SIGTERM', () => sdk.shutdown().catch(console.error));
 }
 

@@ -212,6 +212,12 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
 }
 
 async function startRepair(equipment, performedByUserId, comment) {
+  if (equipment.status !== STATUS.IN_STOCK) {
+    throw Object.assign(
+      new Error('Оборудование должно быть на складе.'),
+      { code: 'REPAIR_ONLY_FROM_STOCK' },
+    );
+  }
   try {
     await atomicStatusChange(
       {
@@ -310,5 +316,4 @@ module.exports = {
   returnEquipmentFromUser,
   startRepair,
   updateEquipment,
-  writeOffEquipment,
 };

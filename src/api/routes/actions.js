@@ -7,7 +7,6 @@ const {
   completeRepair,
   giveEquipmentToUser,
   returnEquipmentFromUser,
-  writeOffEquipment,
 } = require('../../services/equipment.service');
 const { STATUS } = require('../../utils/constants');
 const { equipmentActionsTotal } = require('../../utils/metrics');
@@ -28,8 +27,11 @@ async function actionsRoutes(fastify) {
     const { equipment_id, performed_by_user_id, comment } = parsed.data;
     const item = await findEquipmentById(equipment_id);
     if (!item) return reply.code(404).send({ error: 'Equipment not found' });
-    if (item.status === STATUS.REPAIR) {
-      return reply.code(409).send({ error: 'Equipment is already in repair' });
+    if (item.status === STATUS.WRITTEN_OFF) {
+      return reply.code(409).send({ error: 'Written off equipment cannot be sent to repair' });
+    }
+    if (item.status !== STATUS.IN_STOCK) {
+      return reply.code(409).send({ error: 'Equipment must be in stock before repair' });
     }
     const updated = await startRepair(item, performed_by_user_id, comment || null);
     equipmentActionsTotal.inc({ action: 'repair_started' });

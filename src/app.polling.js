@@ -27,7 +27,7 @@ async function main() {
 
   const bot = createBot();
 
-  // Remove any existing webhook so polling works
+  // Remove any existing webhook so polling works.
   await bot.telegram.deleteWebhook({ drop_pending_updates: true });
 
   notificationWorker = startNotificationWorker(bot);
@@ -38,7 +38,7 @@ async function main() {
 }
 
 async function shutdown(signal) {
-  logger.info(`Received ${signal}, shutting down…`);
+  logger.info(`Received ${signal}, shutting down...`);
   try {
     if (notificationWorker) {
       await notificationWorker.close();
@@ -57,7 +57,7 @@ async function shutdown(signal) {
   process.exit(0);
 }
 
-process.once('SIGINT',  () => shutdown('SIGINT'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 
 main().catch((err) => {

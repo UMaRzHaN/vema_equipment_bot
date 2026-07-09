@@ -157,9 +157,10 @@ redis-cli DEL ff:EXCEL_REPORTS                  # вернуть к ENV-умол
 
 ---
 
-## Деплой на DigitalOcean (production)
+## Деплой на DigitalOcean
 
-Production использует **webhook-режим** (`app.js`) и отдельный `docker-compose.prod.yml`.
+Если на сервере пока нет домена, nginx-конфига для webhook и заполненного `WEBHOOK_URL`, используй polling-режим через `docker-compose.do.yml`.
+Webhook-вариант имеет смысл только после настройки домена и HTTPS.
 
 ### 1. Создать Droplet
 
@@ -185,7 +186,61 @@ ufw allow 443
 ufw enable
 ```
 
-### 3. Настроить nginx + TLS
+### 3. Развернуть приложение и заполнить `.env`
+
+```bash
+git clone https://github.com/твой-юзер/vema_equipment_bot.git /opt/vema-bot
+cd /opt/vema-bot
+cp .env.example .env
+nano .env
+```
+
+Минимально для текущего polling-деплоя:
+
+```env
+NODE_ENV=production
+BOT_TOKEN=токен_от_BotFather
+ADMIN_IDS=твой_telegram_id
+POSTGRES_PASSWORD=очень_надёжный_пароль
+REDIS_PASSWORD=надёжный_redis_пароль
+API_KEY=случайный_секретный_ключ
+LOG_LEVEL=info
+OVERDUE_DAYS=7
+SESSION_TTL=1800
+WEBHOOK_URL=
+WEBHOOK_SECRET=nowebhook
+```
+
+### 4. Запустить на текущем droplet (polling)
+
+```bash
+docker compose -f docker-compose.do.yml up -d --build
+docker compose -f docker-compose.do.yml ps
+docker compose -f docker-compose.do.yml logs -f app
+```
+
+Этот режим:
+
+- не требует домен и nginx
+- использует `src/app.polling.js`
+- не зависит от `POST /webhook`
+- не будет получать ложный `unhealthy` из-за HTTP healthcheck
+
+### 5. Обновление на сервере
+
+```bash
+cd /opt/vema-bot
+git pull origin main
+docker compose -f docker-compose.do.yml run --rm migrate
+docker compose -f docker-compose.do.yml up -d --build app
+docker compose -f docker-compose.do.yml logs --tail=100 app
+```
+
+### 6. Переход на webhook позже
+
+Когда появятся домен, nginx и HTTPS, можно перейти на `docker-compose.prod.yml`.
+
+### 7. Настроить nginx + TLS
 
 ```bash
 # Получить SSL-сертификат
@@ -198,16 +253,7 @@ certbot --nginx -d bot.example.com
 # }
 ```
 
-### 4. Развернуть приложение
-
-```bash
-git clone https://github.com/твой-юзер/vema_equipment_bot.git /opt/vema-bot
-cd /opt/vema-bot
-cp .env.example .env
-nano .env
-```
-
-Заполнить `.env` для production:
+Для webhook-режима `.env` должен содержать:
 
 ```env
 NODE_ENV=production
@@ -221,7 +267,7 @@ API_KEY=<openssl rand -hex 32>
 LOG_LEVEL=info
 ```
 
-### 5. Запустить
+### 8. Запустить webhook-вариант
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
@@ -234,7 +280,7 @@ curl http://localhost:3000/ready
 # {"status":"ready","checks":{"postgres":{"status":"ok"},"redis":{"status":"ok"},...}}
 ```
 
-### 6. Автозапуск при перезагрузке
+### 9. Автозапуск при перезагрузке
 
 ```bash
 systemctl enable docker

@@ -40,13 +40,13 @@ function formatDateOnly(value) {
 function statusLabel(status) {
   switch (status) {
     case STATUS.IN_STOCK:
-      return '\u041D\u0430 \u0441\u043A\u043B\u0430\u0434\u0435';
+      return 'На складе';
     case STATUS.WITH_USER:
-      return '\u0423 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F';
+      return 'У пользователя';
     case STATUS.REPAIR:
-      return '\u0412 \u0440\u0435\u043C\u043E\u043D\u0442\u0435';
+      return 'В ремонте';
     case STATUS.WRITTEN_OFF:
-      return '\u0421\u043F\u0438\u0441\u0430\u043D\u043E';
+      return 'Списано';
     default:
       return status || '-';
   }
@@ -61,7 +61,7 @@ function escapeHtml(value) {
 
 function padString(value, width) {
   const text = String(value ?? '-').trim().replace(/\s+/g, ' ');
-  if (text.length > width) return `${text.slice(0, width - 1)}\u2026`;
+  if (text.length > width) return `${text.slice(0, width - 1)}…`;
   return text.padEnd(width, ' ');
 }
 

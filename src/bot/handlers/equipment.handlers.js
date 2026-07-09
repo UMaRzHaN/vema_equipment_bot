@@ -10,6 +10,8 @@ const {
   buildBackKeyboard,
   buildCategoryListKeyboard,
   buildLocationRequestKeyboard,
+  buildMyEquipmentKeyboard,
+  buildMyEquipmentSelectionKeyboard,
   mainMenu,
 } = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
@@ -129,6 +131,24 @@ function renderHistoryText(item, entries) {
   return `${title}${lines.join('\n\n')}`;
 }
 
+function buildHistoryKeyboard(equipmentId, page, hasPrev, hasNext) {
+  const rows = [];
+  const paginationRow = [];
+
+  if (hasPrev) {
+    paginationRow.push({ text: '← Назад', callback_data: `history_${equipmentId}_${page - 1}` });
+  }
+  if (hasNext) {
+    paginationRow.push({ text: 'Дальше →', callback_data: `history_${equipmentId}_${page + 1}` });
+  }
+  if (paginationRow.length) {
+    rows.push(paginationRow);
+  }
+
+  rows.push([{ text: '← К карточке', callback_data: `open_${equipmentId}` }]);
+  return { inline_keyboard: rows };
+}
+
 function renderDurationSelectionText(item) {
   return [
     `📦 Выдача: ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
@@ -144,13 +164,12 @@ function renderGiveSelectionText(item, selectedComponents = [], durationDays = n
     : '• Пока ничего не выбрано';
   const durationLine = durationDays && expectedReturnDate
     ? `Срок: ${durationDays} дн. (до ${formatDate(expectedReturnDate)})`
-    : 'Срок: не выбран';
+    : null;
 
   return [
     `📦 Выдача: ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
     '',
-    durationLine,
-    '',
+    ...(durationLine ? [durationLine, ''] : []),
     'Быстрые кнопки:',
     'Минимум — базовый набор, Полный комплект — все для этого бренда или модели.',
     '',
@@ -166,14 +185,13 @@ function renderGiveConfirmationText(item, components, durationDays, expectedRetu
     : '• Без комплектующих';
   const durationLine = durationDays && expectedReturnDate
     ? `Срок: ${durationDays} дн.\nВернуть до: ${formatDate(expectedReturnDate)}`
-    : 'Срок: не выбран';
+    : null;
 
   return [
     '📦 Вы собираетесь взять:',
     `${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
     '',
-    durationLine,
-    '',
+    ...(durationLine ? [durationLine, ''] : []),
     'Комплект:',
     componentsText,
     '',
@@ -285,6 +303,71 @@ async function promptAddMoreEquipment(ctx) {
   return ctx.reply('Выберите ещё оборудование:', buildCategoryListKeyboard(pageItems, 0, totalPages));
 }
 
+async function getCurrentUserEquipmentItems(ctx) {
+  const allItems = await listAllEquipment();
+  return allItems
+    .filter((item) => item.status === STATUS.WITH_USER && Number(item.current_holder_user_id) === Number(ctx.from.id))
+    .sort((a, b) => {
+      const brandOrder = (a.brand || 'Без бренда').localeCompare(b.brand || 'Без бренда', 'ru');
+      if (brandOrder !== 0) return brandOrder;
+      return (a.model || '').localeCompare(b.model || '', 'ru');
+    });
+}
+
+async function showCurrentUserEquipment(ctx) {
+  const items = await getCurrentUserEquipmentItems(ctx);
+
+  if (!items.length) {
+    return ctx.reply('У вас сейчас нет оборудования на руках.', mainMenu(ctx));
+  }
+
+  await ctx.reply('🎒 Ваше оборудование:', buildMyEquipmentKeyboard(items));
+  return ctx.reply('Выберите действие:', mainMenu(ctx));
+}
+
+function getMyEquipmentSelectionText(mode, selectedCount, totalCount) {
+  const actionLine = mode === 'extend'
+    ? 'Выберите оборудование, которое нужно продлить.'
+    : 'Выберите оборудование, которое нужно вернуть.';
+  return [
+    '🎒 Ваше оборудование',
+    '',
+    actionLine,
+    `Выбрано: ${selectedCount} из ${totalCount}`,
+  ].join('\n');
+}
+
+async function showMyEquipmentSelection(ctx, mode, editMessage = true) {
+  const items = await getCurrentUserEquipmentItems(ctx);
+  if (!items.length) {
+    ensureSession(ctx);
+    delete ctx.session.myEquipmentSelection;
+    const text = mode === 'extend'
+      ? 'У вас нет оборудования для продления.'
+      : 'У вас нет оборудования для возврата.';
+    if (editMessage && ctx.callbackQuery?.message) {
+      return ctx.editMessageText(text);
+    }
+    return ctx.reply(text);
+  }
+
+  ensureSession(ctx);
+  const selectedIds = Array.isArray(ctx.session.myEquipmentSelection?.selectedIds)
+    ? ctx.session.myEquipmentSelection.selectedIds.map((id) => Number(id))
+    : items.map((item) => Number(item.id));
+  const allowedIds = new Set(items.map((item) => Number(item.id)));
+  const normalizedSelection = selectedIds.filter((id) => allowedIds.has(id));
+
+  ctx.session.myEquipmentSelection = { mode, selectedIds: normalizedSelection };
+  const text = getMyEquipmentSelectionText(mode, normalizedSelection.length, items.length);
+  const markup = buildMyEquipmentSelectionKeyboard(items, mode, normalizedSelection);
+
+  if (editMessage && ctx.callbackQuery?.message) {
+    return ctx.editMessageText(text, markup);
+  }
+  return ctx.reply(text, markup);
+}
+
 async function canAdminEquipment(ctx) {
   if (isAdmin(ctx)) return true;
   const user = await getUserByTelegramId(ctx.from.id);
@@ -327,7 +410,7 @@ async function addCurrentItemToGiveCart(ctx, id, components = [], durationDays =
   }
   if (item.status !== STATUS.IN_STOCK) {
     resetFlow(ctx);
-    await ctx.answerCbQuery('\u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e \u0434\u043b\u044f \u0432\u044b\u0434\u0430\u0447\u0438.', { show_alert: true });
+    await ctx.answerCbQuery('Оборудование недоступно для выдачи.', { show_alert: true });
     return;
   }
 
@@ -345,7 +428,7 @@ async function addCurrentItemToGiveCart(ctx, id, components = [], durationDays =
 
   await safeDelete(ctx, ctx.session?.flow?.promptMessage, 'give:prompt');
   resetFlow(ctx);
-  await ctx.answerCbQuery('\u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e \u0432 \u043a\u043e\u0440\u0437\u0438\u043d\u0443');
+  await ctx.answerCbQuery('Добавлено в корзину');
   return showGiveCart(ctx, true);
 }
 
@@ -378,7 +461,7 @@ async function finalizeGiveCart(ctx) {
     ensureSession(ctx);
     const cart = getGiveCart(ctx.session);
     if (!cart.items.length) {
-      await notify('\u041a\u043e\u0440\u0437\u0438\u043d\u0430 \u043f\u0443\u0441\u0442\u0430.', { show_alert: true });
+      await notify('Корзина пуста.', { show_alert: true });
       return;
     }
 
@@ -388,7 +471,7 @@ async function finalizeGiveCart(ctx) {
     for (const cartItem of cart.items) {
       const item = await findEquipmentById(cartItem.equipmentId);
       if (!item || item.status !== STATUS.IN_STOCK) {
-        failed.push({ ...cartItem, reason: '\u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e' });
+        failed.push({ ...cartItem, reason: 'недоступно' });
         continue;
       }
 
@@ -404,7 +487,7 @@ async function finalizeGiveCart(ctx) {
       } catch (err) {
         failed.push({
           ...cartItem,
-          reason: err.code === 'STATUS_CONFLICT' ? '\u0441\u0442\u0430\u0442\u0443\u0441 \u0438\u0437\u043c\u0435\u043d\u0438\u043b\u0441\u044f' : '\u043e\u0448\u0438\u0431\u043a\u0430 \u0432\u044b\u0434\u0430\u0447\u0438',
+          reason: err.code === 'STATUS_CONFLICT' ? 'статус изменился' : 'ошибка выдачи',
         });
       }
     }
@@ -414,13 +497,13 @@ async function finalizeGiveCart(ctx) {
     const successLines = issued.map((item) => `• ${formatEquipmentIssueLabel(item)}`);
     const failedLines = failed.map((item) => `• ${formatEquipmentIssueLabel(item)} (${item.reason})`);
     const resultText = [
-      issued.length ? `\u2705 \u0412\u044b\u0434\u0430\u043d\u043e:\n${successLines.join('\n')}` : null,
-      failed.length ? `\u26a0\ufe0f \u041e\u0441\u0442\u0430\u043b\u043e\u0441\u044c \u0432 \u043a\u043e\u0440\u0437\u0438\u043d\u0435:\n${failedLines.join('\n')}` : null,
+      issued.length ? `✅ Выдано:\n${successLines.join('\n')}` : null,
+      failed.length ? `⚠️ Осталось в корзине:\n${failedLines.join('\n')}` : null,
     ].filter(Boolean).join('\n\n');
 
     if (ctx.callbackQuery || !issued.length) {
       await notify(
-        issued.length ? LABELS.OK_GIVEN : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0432\u044b\u0434\u0430\u0442\u044c \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435.',
+        issued.length ? LABELS.OK_GIVEN : 'Не удалось выдать оборудование.',
         { show_alert: !issued.length },
       );
     }
@@ -429,8 +512,8 @@ async function finalizeGiveCart(ctx) {
       return renderResult(resultText, buildGiveCartKeyboard(ctx.session.giveCart.items));
     }
 
-    await renderResult(resultText || '\u2705 \u041e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435 \u0432\u044b\u0434\u0430\u043d\u043e.');
-    return ctx.reply('\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435:', mainMenu(ctx));
+    await renderResult(resultText || '✅ Оборудование выдано.');
+    return showCurrentUserEquipment(ctx);
   } finally {
     await redis.del(lockKey);
   }
@@ -459,12 +542,17 @@ function registerEquipmentHandlers(bot) {
   bot.action(ACTIONS_REGEX.HISTORY, safe(async (ctx) => {
     await ctx.answerCbQuery();
     const id = parseId(ctx.match[1]);
+    const rawPage = Number(ctx.match[2] || 0);
+    const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 0;
+    const pageSize = 10;
     if (!id) return ctx.reply(LABELS.ERR_INVALID_ID);
     const item = await findEquipmentById(id);
     if (!item) return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
-    const entries = await getFullEquipmentHistory(id, 10);
-    return ctx.editMessageText(renderHistoryText(item, entries), {
-      reply_markup: { inline_keyboard: [[{ text: '← К карточке', callback_data: `open_${id}` }]] },
+    const entries = await getFullEquipmentHistory(id, { limit: pageSize + 1, offset: page * pageSize });
+    const hasNext = entries.length > pageSize;
+    const pageEntries = hasNext ? entries.slice(0, pageSize) : entries;
+    return ctx.editMessageText(renderHistoryText(item, pageEntries), {
+      reply_markup: buildHistoryKeyboard(id, page, page > 0, hasNext),
     });
   }, 'history'));
 
@@ -718,8 +806,8 @@ function registerEquipmentHandlers(bot) {
         flow.data?.expectedReturnDate || null,
       ),
       Markup.inlineKeyboard([
-        [Markup.button.callback('\ud83d\uded2 \u0412 \u043a\u043e\u0440\u0437\u0438\u043d\u0443', `confirmGive_${id}`)],
-        [Markup.button.callback('\u21a9\ufe0f \u041d\u0430\u0437\u0430\u0434 \u043a \u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442\u0443', `backToGiveComponents_${id}`)],
+        [Markup.button.callback('🛒 В корзину', `confirmGive_${id}`)],
+        [Markup.button.callback('↩️ Назад к комплекту', `backToGiveComponents_${id}`)],
       ]),
     );
   }, 'finishGiveComponents'));
@@ -780,14 +868,14 @@ function registerEquipmentHandlers(bot) {
   }, 'addMoreGiveCart'));
 
   bot.action(ACTIONS_REGEX.CLEAR_GIVE_CART, safe(async (ctx) => {
-    await ctx.answerCbQuery('\u041a\u043e\u0440\u0437\u0438\u043d\u0430 \u043e\u0447\u0438\u0449\u0435\u043d\u0430');
+    await ctx.answerCbQuery('Корзина очищена');
     ensureSession(ctx);
     clearGiveCart(ctx.session);
     return showGiveCart(ctx, true);
   }, 'clearGiveCart'));
 
   bot.action(ACTIONS_REGEX.REMOVE_FROM_GIVE_CART, safe(async (ctx) => {
-    await ctx.answerCbQuery('\u041f\u043e\u0437\u0438\u0446\u0438\u044f \u0443\u0434\u0430\u043b\u0435\u043d\u0430');
+    await ctx.answerCbQuery('Позиция удалена');
     ensureSession(ctx);
     removeGiveCartItem(ctx.session, Number(ctx.match[1]));
     return showGiveCart(ctx, true);
@@ -879,54 +967,110 @@ function registerEquipmentHandlers(bot) {
 
   bot.action(ACTIONS_REGEX.RETURN_ALL_MY, safe(async (ctx) => {
     await ctx.answerCbQuery();
-    const allItems = await listAllEquipment();
-    const items = allItems.filter((item) => item.status === STATUS.WITH_USER && Number(item.current_holder_user_id) === Number(ctx.from.id));
-    if (!items.length) {
-      return ctx.reply('У вас нет оборудования для возврата.');
+    ensureSession(ctx);
+    ctx.session.myEquipmentSelection = null;
+    return showMyEquipmentSelection(ctx, 'return', true);
+  }, 'returnAllMy'));
+
+  bot.action(ACTIONS_REGEX.EXTEND_ALL_MY, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    ensureSession(ctx);
+    ctx.session.myEquipmentSelection = null;
+    return showMyEquipmentSelection(ctx, 'extend', true);
+  }, 'extendAllMy'));
+
+  bot.action(ACTIONS_REGEX.TOGGLE_MY_EQUIPMENT_SELECTION, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    ensureSession(ctx);
+
+    const mode = ctx.match[1];
+    const equipmentId = Number(ctx.match[2]);
+    const selection = ctx.session.myEquipmentSelection;
+    if (!selection || selection.mode !== mode) {
+      ctx.session.myEquipmentSelection = null;
+      return showMyEquipmentSelection(ctx, mode, true);
     }
 
+    const selectedSet = new Set((selection.selectedIds || []).map((id) => Number(id)));
+    if (selectedSet.has(equipmentId)) selectedSet.delete(equipmentId);
+    else selectedSet.add(equipmentId);
+    selection.selectedIds = Array.from(selectedSet);
+    return showMyEquipmentSelection(ctx, mode, true);
+  }, 'toggleMyEquipmentSelection'));
+
+  bot.action(ACTIONS_REGEX.TOGGLE_ALL_MY_EQUIPMENT_SELECTION, safe(async (ctx) => {
+    await ctx.answerCbQuery();
     ensureSession(ctx);
+
+    const mode = ctx.match[1];
+    const items = await getCurrentUserEquipmentItems(ctx);
+    const allIds = items.map((item) => Number(item.id));
+    const current = new Set((ctx.session.myEquipmentSelection?.selectedIds || []).map((id) => Number(id)));
+    const allSelected = allIds.length > 0 && allIds.every((id) => current.has(id));
+
+    ctx.session.myEquipmentSelection = {
+      mode,
+      selectedIds: allSelected ? [] : allIds,
+    };
+    return showMyEquipmentSelection(ctx, mode, true);
+  }, 'toggleAllMyEquipmentSelection'));
+
+  bot.action(ACTIONS_REGEX.CONFIRM_MY_EQUIPMENT_SELECTION, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    ensureSession(ctx);
+
+    const mode = ctx.match[1];
+    const selectedIds = (ctx.session.myEquipmentSelection?.selectedIds || []).map((id) => Number(id));
+    if (!selectedIds.length) {
+      return ctx.answerCbQuery('Сначала выберите оборудование.', { show_alert: true });
+    }
+
+    if (mode === 'extend') {
+      const prompt = await ctx.reply('Введите, на сколько дней продлить выбранное оборудование:', buildBackKeyboard());
+      ctx.session.flow = makeFlow(
+        FLOW_TYPE.GIVE_DURATION,
+        1,
+        {},
+        {
+          extendAllMode: true,
+          equipmentIds: selectedIds,
+          promptMessage: rememberMessage(prompt),
+          sourceMessage: rememberMessage(ctx.callbackQuery?.message),
+        },
+      );
+      delete ctx.session.myEquipmentSelection;
+      return prompt;
+    }
+
     ctx.session.flow = makeFlow(
       FLOW_TYPE.RETURN_LOCATION,
       1,
       {},
       {
         returnAllMode: true,
-        equipmentIds: items.map((item) => item.id),
+        equipmentIds: selectedIds,
         sourceMessage: rememberMessage(ctx.callbackQuery?.message),
       },
     );
     const prompt = await ctx.reply(
-      'Отправьте геолокацию склада кнопкой ниже или введите город вручную для возврата всего оборудования:',
+      'Отправьте геолокацию склада кнопкой ниже или введите город вручную для возврата выбранного оборудования:',
       buildLocationRequestKeyboard(),
     );
     ctx.session.flow.promptMessage = rememberMessage(prompt);
+    delete ctx.session.myEquipmentSelection;
     return prompt;
-  }, 'returnAllMy'));
+  }, 'confirmMyEquipmentSelection'));
 
-  bot.action(ACTIONS_REGEX.EXTEND_ALL_MY, safe(async (ctx) => {
+  bot.action(ACTIONS_REGEX.CANCEL_MY_EQUIPMENT_SELECTION, safe(async (ctx) => {
     await ctx.answerCbQuery();
-    const allItems = await listAllEquipment();
-    const items = allItems.filter((item) => item.status === STATUS.WITH_USER && Number(item.current_holder_user_id) === Number(ctx.from.id));
-    if (!items.length) {
-      return ctx.reply('У вас нет оборудования для продления.');
-    }
-
     ensureSession(ctx);
-    const prompt = await ctx.reply('Введите, на сколько дней продлить всё ваше оборудование:', buildBackKeyboard());
-    ctx.session.flow = makeFlow(
-      FLOW_TYPE.GIVE_DURATION,
-      1,
-      {},
-      {
-        extendAllMode: true,
-        equipmentIds: items.map((item) => item.id),
-        promptMessage: rememberMessage(prompt),
-        sourceMessage: rememberMessage(ctx.callbackQuery?.message),
-      },
-    );
-    return prompt;
-  }, 'extendAllMy'));
+    delete ctx.session.myEquipmentSelection;
+    const items = await getCurrentUserEquipmentItems(ctx);
+    if (!items.length) {
+      return ctx.editMessageText('У вас сейчас нет оборудования на руках.');
+    }
+    return ctx.editMessageText('🎒 Ваше оборудование:', buildMyEquipmentKeyboard(items));
+  }, 'cancelMyEquipmentSelection'));
 
   bot.action(ACTIONS_REGEX.REPAIR, safe(async (ctx) => {
     if (!await canManageEquipment(ctx)) return ctx.answerCbQuery('Нет прав для этого действия.', { show_alert: true });
@@ -935,8 +1079,8 @@ function registerEquipmentHandlers(bot) {
 
     const item = await findEquipmentById(id);
     if (!item) return ctx.reply('Оборудование не найдено.');
-    if (item.status === STATUS.REPAIR) return ctx.answerCbQuery('Оборудование уже в ремонте.', { show_alert: true });
     if (item.status === STATUS.WRITTEN_OFF) return ctx.answerCbQuery('Списанное оборудование нельзя отправить в ремонт.', { show_alert: true });
+    if (item.status !== STATUS.IN_STOCK) return ctx.answerCbQuery('В ремонт можно отправить только оборудование на складе.', { show_alert: true });
 
     const locked = await acquireLock(`lock:repair:${id}`);
     if (!locked) return ctx.answerCbQuery('Действие уже выполняется...', { show_alert: true });
@@ -971,20 +1115,6 @@ function registerEquipmentHandlers(bot) {
     const text = await renderEquipmentCard(updated);
     return markup ? ctx.editMessageText(text, markup) : ctx.editMessageText(text);
   }, 'fromRepair'));
-
-  bot.action(ACTIONS_REGEX.WRITEOFF, safe(async (ctx) => {
-    if (!await canAdminEquipment(ctx)) return ctx.answerCbQuery('Только администратор может списывать.', { show_alert: true });
-    await ctx.answerCbQuery();
-    const id = parseId(ctx.match[1]);
-    if (!id) return ctx.reply('Неверный идентификатор.');
-    const item = await findEquipmentById(id);
-    if (!item) return ctx.editMessageText('Оборудование не найдено.');
-    if (item.status === STATUS.WRITTEN_OFF) return ctx.editMessageText('Уже списано.');
-    ensureSession(ctx);
-    ctx.session.flow = makeFlow(FLOW_TYPE.WRITEOFF, 1, {}, { equipmentId: id, sourceMessage: rememberMessage(ctx.callbackQuery?.message) });
-    const prompt = await ctx.reply('Введите причину списания (или отправьте — чтобы пропустить):');
-    ctx.session.flow.promptMessage = rememberMessage(prompt);
-  }, 'writeoff'));
 
   bot.action(ACTIONS_REGEX.EDIT, safe(async (ctx) => {
     if (!await canAdminEquipment(ctx)) return ctx.answerCbQuery('Только администратор может редактировать.', { show_alert: true });

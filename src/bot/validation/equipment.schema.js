@@ -11,7 +11,7 @@ const componentSchema = z.union([
 ]);
 
 const categorySchema = z.string()
-  .min(1, '\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044e')
+  .min(1, 'Укажите категорию')
   .max(100);
 
 const equipmentCreateSchema = z.object({

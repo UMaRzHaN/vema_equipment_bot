@@ -17,6 +17,7 @@ const {
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
 const { assignUserRole, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged } = require('../../services/user.service');
 const { startProfileRegistration, renderProfileCard } = require('../utils/profile.utils');
+const { getEquipmentSuggestionText } = require('../helpers/equipmentHints');
 const {
   buildBrandListKeyboard,
   buildCategoryExportKeyboard,
@@ -27,6 +28,17 @@ const {
   buildUserListKeyboard,
   mainMenu,
 } = require('../views/menus');
+
+function mergeWithBackKeyboard(options) {
+  const base = options?.reply_markup?.keyboard || [];
+  return {
+    reply_markup: {
+      keyboard: [...base, [{ text: LABELS.back }]],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+    },
+  };
+}
 
 function paginateList(items, page = 0, size = 4) {
   const totalPages = Math.max(Math.ceil(items.length / size), 1);
@@ -80,7 +92,7 @@ async function renderBrandMenu(ctx, categoryName, page = 0, editMessage = false)
   ctx.session.selectedBrand = null;
   ctx.session.brandPage = safePage;
 
-  const text = `Выберите бренд для категории ${categoryName} или нажмите "${LABELS.allBrands}"`;
+  const text = `Выберите бренд для категории "${categoryName}" или нажмите "${LABELS.allBrands}"`;
   const markup = buildBrandListKeyboard(categoryName, items, safePage, totalPages);
   if (editMessage) return ctx.editMessageText(text, markup);
   return ctx.reply(text, markup);
@@ -161,7 +173,11 @@ function registerNavigationHandlers(bot) {
     resetFlow(ctx);
     ensureSession(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.CATEGORY);
-    return ctx.reply('Введите категорию оборудования:');
+    const prompt = await getEquipmentSuggestionText(
+      'category',
+      'Введите категорию оборудования:',
+    );
+    return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
   }, 'addEquipment'));
 
   bot.hears(LABELS.previousPage, safe(async (ctx) => {
@@ -213,6 +229,19 @@ function registerNavigationHandlers(bot) {
     const page = ctx.session.mode === 'summary' ? ctx.session.summaryPage || 0 : ctx.session.listPage || 0;
     return renderCategoryMenu(ctx, page);
   }, 'back_categories'));
+
+  bot.action(/back_brandlist_(.+)/, safe(async (ctx) => {
+    if (!await ensureRegistered(ctx)) return;
+    await ctx.answerCbQuery();
+
+    let categoryName;
+    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
+
+    ensureSession(ctx);
+    ctx.session.selectedCategory = categoryName;
+    ctx.session.selectedBrand = null;
+    return renderBrandMenu(ctx, categoryName, ctx.session.brandPage || 0, true);
+  }, 'back_brandlist'));
 
   bot.action(/brandPage_(.+?)__(\d+)/, safe(async (ctx) => {
     await ctx.answerCbQuery();

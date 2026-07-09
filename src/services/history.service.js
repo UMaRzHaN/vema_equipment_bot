@@ -18,8 +18,8 @@ async function getEquipmentTimeline(equipmentId) {
   return { lastIssueDate, lastReturnDate, lastRepairDate };
 }
 
-async function getFullEquipmentHistory(equipmentId, limit = 10) {
-  return getEquipmentHistory(equipmentId, limit);
+async function getFullEquipmentHistory(equipmentId, options = 10) {
+  return getEquipmentHistory(equipmentId, options);
 }
 
 async function findOverdueEquipment(thresholdDays = 7) {

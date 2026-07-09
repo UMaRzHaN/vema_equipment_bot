@@ -3,9 +3,9 @@
 const { getSuggestionsForField } = require('../../repositories/equipment.repo');
 const logger = require('../../utils/logger');
 
-async function buildSuggestionsKeyboard(field, category = null) {
+async function buildSuggestionsKeyboard(field, category = null, brand = null) {
   try {
-    const suggestions = await getSuggestionsForField(field, category);
+    const suggestions = await getSuggestionsForField(field, category, brand);
     if (!suggestions.length) return null;
     return {
       reply_markup: {
@@ -16,13 +16,13 @@ async function buildSuggestionsKeyboard(field, category = null) {
       },
     };
   } catch (err) {
-    logger.error({ field, category, err: err.message }, 'equipmentHints error');
+    logger.error({ field, category, brand, err: err.message }, 'equipmentHints error');
     return null;
   }
 }
 
-async function getEquipmentSuggestionText(field, baseText, category = null) {
-  const keyboard = await buildSuggestionsKeyboard(field, category);
+async function getEquipmentSuggestionText(field, baseText, category = null, brand = null) {
+  const keyboard = await buildSuggestionsKeyboard(field, category, brand);
   if (!keyboard) return { text: baseText, options: undefined };
   return {
     text:    `${baseText}\n\nМожно выбрать из подсказок ниже или ввести вручную.`,

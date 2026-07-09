@@ -7,7 +7,6 @@ const FLOW_TYPE = Object.freeze({
   GIVE_DURATION: 'give_duration',
   GIVE_COMPONENTS: 'give_components',
   REPAIR: 'repair',
-  WRITEOFF: 'writeoff',
   REGISTER_PROFILE: 'register_profile',
   EDIT_PROFILE: 'edit_profile',
   ASSIGN_ROLE: 'assign_role',

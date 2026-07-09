@@ -21,7 +21,13 @@ async function addHistory(data) {
   );
 }
 
-async function getEquipmentHistory(equipmentId, limit = 10) {
+async function getEquipmentHistory(equipmentId, options = 10) {
+  const { limit, offset } = typeof options === 'number'
+    ? { limit: options, offset: 0 }
+    : {
+      limit: Number.isInteger(options?.limit) ? options.limit : 10,
+      offset: Number.isInteger(options?.offset) ? options.offset : 0,
+    };
   const result = await query(
     `SELECT h.action, h.from_status, h.to_status, h.comment, h.action_date,
             u.first_name, u.last_name, u.username
@@ -29,8 +35,9 @@ async function getEquipmentHistory(equipmentId, limit = 10) {
      LEFT JOIN users u ON u.telegram_user_id = h.performed_by_user_id
      WHERE h.equipment_id = $1
      ORDER BY h.action_date DESC
-     LIMIT $2`,
-    [equipmentId, limit],
+     LIMIT $2
+     OFFSET $3`,
+    [equipmentId, limit, offset],
   );
   return result.rows;
 }

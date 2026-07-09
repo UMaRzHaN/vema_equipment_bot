@@ -13,24 +13,13 @@ const { formatComponent, normalizeComponents } = require("../utils/components");
 const notificationQueue = new Queue("notifications", { connection: bullRedis });
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
-function buildUserOverdueReplyMarkup(items = []) {
-  const rows = items.map((item) => ([
-    Markup.button.callback(
-      `⏳ ${item.model || item.serial_number || item.id}`,
-      `extend_${item.id}`,
-    ),
-    Markup.button.callback(
-      `↩️ ${item.model || item.serial_number || item.id}`,
-      `return_${item.id}`,
-    ),
-  ]));
-
-  rows.push([
-    Markup.button.callback("⏳ Продлить всё", "extendAllMy"),
-    Markup.button.callback("↩️ Вернуть всё", "returnAllMy"),
-  ]);
-
-  return Markup.inlineKeyboard(rows).reply_markup;
+function buildUserOverdueReplyMarkup() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("⏳ Продлить", "extendAllMy"),
+      Markup.button.callback("↩️ Вернуть", "returnAllMy"),
+    ],
+  ]).reply_markup;
 }
 
 function buildUserLink(userId, usersMap) {
@@ -60,10 +49,14 @@ function buildUserSection(userId, items, usersMap) {
   return [`Пользователь: ${buildUserLink(userId, usersMap)}`, lines].join("\n");
 }
 
-function buildAdminOverdueMessage(itemsByUser, overdueDays, usersMap) {
+function buildAdminOverdueMessageForRecipient(recipientId, itemsByUser, overdueDays, usersMap) {
+  const recipientNumericId = Number(recipientId);
   const sections = Object.entries(itemsByUser)
+    .filter(([userId]) => Number(userId) !== recipientNumericId)
     .map(([userId, items]) => buildUserSection(userId, items, usersMap))
     .join("\n\n");
+
+  if (!sections) return null;
 
   return `⚠️ Есть просроченное оборудование.\nПорог для позиций без плановой даты возврата: ${overdueDays} дн.\n\n${sections}`;
 }
@@ -108,7 +101,7 @@ async function enqueueOverdueNotificationForUser(userId, overdueDays = 7) {
     {
       recipients: [targetUserId],
       message: userMessage,
-      replyMarkup: buildUserOverdueReplyMarkup(userItems),
+      replyMarkup: buildUserOverdueReplyMarkup(),
     },
     { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
   );
@@ -140,7 +133,9 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
         ...envAdminIds,
         ...roleAdmins.map((user) => user.telegram_user_id),
       ]),
-    ];
+    ]
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
 
     const itemsByUser = overdueItems.reduce((accumulator, item) => {
       const holderId = item.current_holder_user_id;
@@ -153,26 +148,30 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
     const userIds = Object.keys(itemsByUser).map(Number);
     const usersMap = await getUsersByTelegramIds(userIds);
 
-    const adminMessage = buildAdminOverdueMessage(
-      itemsByUser,
-      overdueDays,
-      usersMap,
-    );
-    logger.info(
-      { recipients: allAdminIds },
-      'Adding sendOverdueAdmins job to queue',
-    );
-    const adminJob = await notificationQueue.add(
-      "sendOverdueAdmins",
-      { recipients: allAdminIds, message: adminMessage },
-      { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
-    );
-    logger.info(
-      { jobId: adminJob.id, jobName: adminJob.name },
-      'sendOverdueAdmins job added to queue',
-    );
+    for (const adminId of allAdminIds) {
+      const adminMessage = buildAdminOverdueMessageForRecipient(
+        adminId,
+        itemsByUser,
+        overdueDays,
+        usersMap,
+      );
+      if (!adminMessage) continue;
 
-    // Give the admin job a moment to be picked up by the worker
+      logger.info(
+        { recipient: adminId },
+        "Adding sendOverdueAdmins job to queue",
+      );
+      const adminJob = await notificationQueue.add(
+        "sendOverdueAdmins",
+        { recipients: [adminId], message: adminMessage },
+        { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+      );
+      logger.info(
+        { jobId: adminJob.id, jobName: adminJob.name, recipient: adminId },
+        "sendOverdueAdmins job added to queue",
+      );
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     for (const [userId, userItems] of Object.entries(itemsByUser)) {
@@ -180,7 +179,7 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
       if (!usersMap.has(String(userId))) {
         logger.warn(
           { userId, itemCount: userItems.length },
-          'Skipping sendOverdueUser job: holder is missing from users table',
+          "Skipping sendOverdueUser job: holder is missing from users table",
         );
         continue;
       }
@@ -193,20 +192,20 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
       );
       logger.info(
         { userId, itemCount: userItems.length },
-        'Adding sendOverdueUser job to queue',
+        "Adding sendOverdueUser job to queue",
       );
       const userJob = await notificationQueue.add(
         "sendOverdueUser",
         {
           recipients: [Number(userId)],
           message: userMessage,
-          replyMarkup: buildUserOverdueReplyMarkup(userItems),
+          replyMarkup: buildUserOverdueReplyMarkup(),
         },
         { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
       );
       logger.info(
         { jobId: userJob.id, userId, itemCount: userItems.length },
-        'sendOverdueUser job added to queue',
+        "sendOverdueUser job added to queue",
       );
     }
 

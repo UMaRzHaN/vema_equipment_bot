@@ -277,22 +277,36 @@ async function atomicStatusChange(statusData, historyData) {
   });
 }
 
-async function getSuggestionsForField(field, category = null) {
-  const COLUMN_MAP = {
-    category: 'category',
-    brand: 'brand',
-    model: 'model',
-    purchase_date: 'purchase_date',
+async function getSuggestionsForField(field, category = null, brand = null) {
+  const FIELD_MAP = {
+    category: {
+      select: 'category',
+      where: "category IS NOT NULL AND category != ''",
+    },
+    brand: {
+      select: 'brand',
+      where: "brand IS NOT NULL AND brand != ''",
+    },
+    model: {
+      select: 'model',
+      where: "model IS NOT NULL AND model != ''",
+    },
+    purchase_date: {
+      select: "TO_CHAR(purchase_date, 'DD.MM.YYYY')",
+      where: 'purchase_date IS NOT NULL',
+    },
   };
-  const col = COLUMN_MAP[field];
-  if (!col) return [];
+  const config = FIELD_MAP[field];
+  if (!config) return [];
   const params = [];
   const categoryFilter = category ? (params.push(category), `AND category = $${params.length}`) : '';
+  const brandFilter = brand ? (params.push(brand), `AND brand = $${params.length}`) : '';
   const result = await query(
-    `SELECT DISTINCT ${col} AS value
+    `SELECT DISTINCT ${config.select} AS value
      FROM equipment
-     WHERE ${col} IS NOT NULL AND ${col} != ''
+     WHERE ${config.where}
      ${categoryFilter}
+     ${brandFilter}
      ORDER BY value
      LIMIT 6`,
     params,

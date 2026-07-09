@@ -65,21 +65,71 @@ function preset({ single = [], quantity = [], minimal = [], full = [] }) {
 const BATTERIES_X2 = qty("Батарейка", 2);
 
 const CAMERA_PRESET = preset({
-  single: ["Штатив","Анемометр", "Дальнометр", "Кабель HDMI", "Кабель HDMI-мини"],
+  single: [
+    "Штатив",
+    "Анемометр",
+    "Дальнометр",
+    "Кабель HDMI",
+    "Кабель HDMI-мини",
+  ],
   quantity: [BATTERIES_X2],
   minimal: [BATTERIES_X2],
-  full: [BATTERIES_X2, "Штатив", "Анемометр", "Дальнометр"],
+  full: [
+    BATTERIES_X2,
+    "Штатив",
+    "Анемометр",
+    "Дальнометр",
+  ],
 });
 
 const LAPTOP_PRESET = preset({
-  single: ["Зарядка", "Мышка", "Переходник", "Кабель HDMI", "Кабель HDMI-мини"],
-  minimal: ["Зарядка", "Мышка", "Переходник"],
+  single: [
+    "Зарядка",
+    "Мышка",
+    "Переходник",
+    "Кабель HDMI",
+    "Кабель HDMI-мини",
+  ],
+  minimal: [
+    "Зарядка",
+    "Мышка",
+    "Переходник",
+  ],
 });
 
 const GENERIC_PRESET = preset({
-  single: ["Зарядка", "Переходник"],
+  single: [
+    "Зарядка",
+    "Переходник",
+  ],
   quantity: [BATTERIES_X2],
-  minimal: ["Зарядка", "Мышка", "Переходник"],
+  minimal: [
+    "Зарядка",
+    "Мышка",
+    "Переходник",
+  ],
+});
+
+const SAMPLER_PRESET = preset({
+  single: [
+    "Воронка",
+    "Большой мешок",
+    "Маленький мешок",
+    "Конус",
+  ],
+  quantity: [qty("Розовый мешок", 1)],
+  minimal: [
+    "Воронка",
+    "Маленький мешок",
+    qty("Розовый мешок", 1),
+  ],
+  full: [
+    "Воронка",
+    "Большой мешок",
+    "Маленький мешок",
+    qty("Розовый мешок", 1),
+    "Конус",
+  ],
 });
 
 const CATEGORY_PRESETS = {
@@ -88,7 +138,9 @@ const CATEGORY_PRESETS = {
   generic: GENERIC_PRESET,
 };
 
-const MODEL_PRESETS = {};
+const MODEL_PRESETS = {
+  sampler: SAMPLER_PRESET,
+};
 
 function detectCategoryKey(item) {
   const haystack =
@@ -96,7 +148,9 @@ function detectCategoryKey(item) {
   if (haystack.includes("камер") || haystack.includes("camera")) {
     return "camera";
   }
-  if (haystack.includes("ноут") || haystack.includes("laptop")) return "laptop";
+  if (haystack.includes("ноут") || haystack.includes("laptop")) {
+    return "laptop";
+  }
   return "generic";
 }
 
@@ -105,9 +159,7 @@ function mergePreset(basePreset, overridePreset = {}) {
     overridePreset.single ?? basePreset.singleEntries ?? basePreset.single,
   );
   const quantityEntries = normalizePresetEntries(
-    overridePreset.quantity ??
-      basePreset.quantityEntries ??
-      basePreset.quantity,
+    overridePreset.quantity ?? basePreset.quantityEntries ?? basePreset.quantity,
   );
   const minimalEntries = normalizePresetEntries(
     overridePreset.minimal ?? basePreset.minimalEntries ?? basePreset.minimal,
@@ -124,12 +176,20 @@ function mergePreset(basePreset, overridePreset = {}) {
   };
 }
 
+function getModelPreset(modelKey) {
+  return (
+    MODEL_PRESETS[modelKey]
+    || Object.entries(MODEL_PRESETS).find(([key]) => modelKey.includes(key))?.[1]
+    || null
+  );
+}
+
 function getGiveComponentsPreset(item) {
   const categoryKey = detectCategoryKey(item);
   const modelKey = normalizeKey(`${item.brand || ""} ${item.model || ""}`);
 
   const basePreset = CATEGORY_PRESETS[categoryKey] || CATEGORY_PRESETS.generic;
-  const modelPreset = MODEL_PRESETS[modelKey];
+  const modelPreset = getModelPreset(modelKey);
 
   const resolved = mergePreset(basePreset, modelPreset || {});
 
