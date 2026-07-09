@@ -2,7 +2,7 @@
 
 exports.up = (pgm) => {
   pgm.addColumn('equipment', {
-    warehouse: { type: 'text', notNull: true, default: "'Ташкент'" },
+    warehouse: { type: 'text', notNull: true, default: 'Ташкент' },
   });
 };
 

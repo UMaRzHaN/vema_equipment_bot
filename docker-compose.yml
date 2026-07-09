@@ -1,15 +1,40 @@
-# ────────────────────────────────────────────────────────────────────────────
-# DEVELOPMENT / LOCAL — uses polling mode (no webhook / domain required)
+# ------------------------------------------------------------------------------
+# DEVELOPMENT / LOCAL - uses polling mode (no webhook / domain required)
 # Usage:
 #   cp .env.example .env   # fill in BOT_TOKEN, ADMIN_IDS
 #   docker compose up --build
 #
 # For production (webhook mode) use: docker compose -f docker-compose.prod.yml up
-# ────────────────────────────────────────────────────────────────────────────
-version: "3.9"
+# ------------------------------------------------------------------------------
 
 services:
-  # ── Run pending migrations, then exit ───────────────────────────────────
+  # Run pending migrations, then exit
+  test:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file: .env
+    environment:
+      NODE_ENV: test
+      BOT_TOKEN: 1234567890
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-vema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    command: sh -lc "npm ci && npm test"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vema-net
+
   migrate:
     build: .
     command: npm run migrate
@@ -29,7 +54,7 @@ services:
       - vema-net
     restart: "no"
 
-  # ── Bot in polling mode ──────────────────────────────────────────────────
+  # Bot in polling mode
   app:
     build: .
     container_name: vema-bot-dev
@@ -63,6 +88,8 @@ services:
     image: postgres:16-alpine
     container_name: vema-postgres-dev
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vema_bot}
       POSTGRES_USER: ${POSTGRES_USER:-vema}
@@ -81,6 +108,8 @@ services:
     image: redis:7-alpine
     container_name: vema-redis-dev
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis-dev-data:/data

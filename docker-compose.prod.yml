@@ -1,5 +1,5 @@
-# ────────────────────────────────────────────────────────────────────────────
-# PRODUCTION — webhook mode, Redis password, resource limits
+# ------------------------------------------------------------------------------
+# PRODUCTION - webhook mode, Redis password, resource limits
 #
 # Pre-requisites:
 #   1. DNS A-record pointing your domain to this server
@@ -16,11 +16,11 @@
 #
 # View logs:
 #   docker compose -f docker-compose.prod.yml logs -f app
-# ────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 version: "3.9"
 
 services:
-  # ── Run pending migrations once, then exit ───────────────────────────────
+  # Run pending migrations once, then exit
   migrate:
     build:
       context: .
@@ -37,7 +37,7 @@ services:
       - vema-net
     restart: "no"
 
-  # ── Bot in webhook mode ──────────────────────────────────────────────────
+  # Bot in webhook mode
   app:
     build:
       context: .
@@ -47,7 +47,7 @@ services:
     restart: unless-stopped
     command: node src/app.js
     ports:
-      - "127.0.0.1:3000:3000"   # Bind to loopback only — nginx proxies externally
+      - "127.0.0.1:3000:3000"   # Bind to loopback only - nginx proxies externally
     env_file: .env
     environment:
       NODE_ENV: production

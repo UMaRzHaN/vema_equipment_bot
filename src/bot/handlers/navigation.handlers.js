@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const { LABELS } = require('../labels');
 const logger = require('../../utils/logger');
@@ -7,18 +7,44 @@ const { safe } = require('../middlewares/error.handler');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
 const { FLOW_TYPE, ADD_STEP } = require('../fsm/states');
-const { listCategories, listEquipmentByCategory } = require('../../services/equipment.service');
+const {
+  listAllEquipment,
+  listBrandsByCategory,
+  listCategories,
+  listEquipmentByCategory,
+  listEquipmentByCategoryAndBrand,
+} = require('../../services/equipment.service');
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
 const { assignUserRole, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged } = require('../../services/user.service');
 const { startProfileRegistration, renderProfileCard } = require('../utils/profile.utils');
 const {
+  buildBrandListKeyboard,
   buildCategoryExportKeyboard,
   buildCategoryItemsKeyboard,
   buildCategoryListKeyboard,
+  buildMyEquipmentKeyboard,
   buildRoleSelectKeyboard,
   buildUserListKeyboard,
   mainMenu,
 } = require('../views/menus');
+
+function paginateList(items, page = 0, size = 4) {
+  const totalPages = Math.max(Math.ceil(items.length / size), 1);
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  return {
+    items: items.slice(safePage * size, safePage * size + size),
+    page: safePage,
+    totalPages,
+  };
+}
+
+function sortItemsForList(items) {
+  return [...items].sort((a, b) => {
+    const brandOrder = (a.brand || 'Без бренда').localeCompare(b.brand || 'Без бренда', 'ru');
+    if (brandOrder !== 0) return brandOrder;
+    return (a.model || '').localeCompare(b.model || '', 'ru');
+  });
+}
 
 async function ensureRegistered(ctx) {
   if (ctx.session?.flow?.type === 'register_profile' || ctx.session?.flow?.type === 'edit_profile') return true;
@@ -30,35 +56,87 @@ async function ensureRegistered(ctx) {
   return true;
 }
 
-function paginateCategories(categories, page = 0, size = 4) {
-  const totalPages = Math.max(Math.ceil(categories.length / size), 1);
-  const safePage   = Math.max(0, Math.min(page, totalPages - 1));
-  return { items: categories.slice(safePage * size, safePage * size + size), page: safePage, totalPages };
-}
-
 async function renderCategoryMenu(ctx, page = 0) {
   const categories = await listCategories();
   if (!categories.length) return ctx.reply('Нет категорий', mainMenu(ctx));
 
-  const { items, page: safePage, totalPages } = paginateCategories(categories, page);
+  const { items, page: safePage, totalPages } = paginateList(categories, page);
   ensureSession(ctx);
-  if (ctx.session.mode === 'summary') ctx.session.summaryPage = safePage;
-  else                                ctx.session.listPage    = safePage;
+  ctx.session.selectedCategory = null;
+  ctx.session.selectedBrand = null;
 
-  return ctx.reply('Выберите категорию', buildCategoryListKeyboard(items, safePage, totalPages));
+  if (ctx.session.mode === 'summary') ctx.session.summaryPage = safePage;
+  else ctx.session.listPage = safePage;
+
+  return ctx.reply('Выберите тип оборудования', buildCategoryListKeyboard(items, safePage, totalPages));
+}
+
+async function renderBrandMenu(ctx, categoryName, page = 0, editMessage = false) {
+  const brands = await listBrandsByCategory(categoryName);
+  const { items, page: safePage, totalPages } = paginateList(brands, page);
+  ensureSession(ctx);
+  ctx.session.mode = 'brand_list';
+  ctx.session.selectedCategory = categoryName;
+  ctx.session.selectedBrand = null;
+  ctx.session.brandPage = safePage;
+
+  const text = `Выберите бренд для категории ${categoryName} или нажмите "${LABELS.allBrands}"`;
+  const markup = buildBrandListKeyboard(categoryName, items, safePage, totalPages);
+  if (editMessage) return ctx.editMessageText(text, markup);
+  return ctx.reply(text, markup);
+}
+
+async function renderEquipmentList(ctx, categoryName, brandName, page = 0, editMessage = false) {
+  const items = sortItemsForList(
+    brandName
+      ? await listEquipmentByCategoryAndBrand(categoryName, brandName)
+      : await listEquipmentByCategory(categoryName),
+  );
+
+  const title = brandName ? `📦 ${categoryName} • ${brandName}` : `📦 ${categoryName} • все бренды`;
+  if (!items.length) {
+    const emptyText = brandName
+      ? `Нет оборудования бренда ${brandName} в категории ${categoryName}`
+      : `Нет оборудования в категории ${categoryName}`;
+    if (editMessage) return ctx.editMessageText(emptyText);
+    return ctx.reply(emptyText);
+  }
+
+  const markup = buildCategoryItemsKeyboard(items, page, { category: categoryName, brand: brandName || '' });
+  if (editMessage) return ctx.editMessageText(title, markup);
+  return ctx.reply(title, markup);
+}
+
+async function renderMyEquipment(ctx) {
+  const allItems = await listAllEquipment();
+  const items = sortItemsForList(
+    allItems.filter((item) => item.status === 'у пользователя' && Number(item.current_holder_user_id) === Number(ctx.from.id)),
+  );
+
+  if (!items.length) {
+    return ctx.reply('У вас сейчас нет оборудования на руках.', mainMenu(ctx));
+  }
+
+  return ctx.reply('🎒 Ваше оборудование:', buildMyEquipmentKeyboard(items));
 }
 
 function registerNavigationHandlers(bot) {
   bot.start(safe(async (ctx) => {
     resetFlow(ctx);
     if (!await ensureRegistered(ctx)) return;
-    return ctx.reply('Система учёта оборудования', mainMenu(ctx));
+    return ctx.reply('Система учета оборудования', mainMenu(ctx));
   }, 'start'));
 
   bot.hears(LABELS.profile, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     return renderProfileCard(ctx);
   }, 'profile'));
+
+  bot.hears(LABELS.myEquipment, safe(async (ctx) => {
+    if (!await ensureRegistered(ctx)) return;
+    resetFlow(ctx);
+    return renderMyEquipment(ctx);
+  }, 'myEquipment'));
 
   bot.hears(LABELS.categories, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
@@ -89,18 +167,20 @@ function registerNavigationHandlers(bot) {
   bot.hears(LABELS.previousPage, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     ensureSession(ctx);
+
     const page = ctx.session.mode === 'summary'
       ? Math.max((ctx.session.summaryPage || 0) - 1, 0)
-      : Math.max((ctx.session.listPage    || 0) - 1, 0);
+      : Math.max((ctx.session.listPage || 0) - 1, 0);
     return renderCategoryMenu(ctx, page);
   }, 'previousPage'));
 
   bot.hears(LABELS.nextPage, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     ensureSession(ctx);
+
     const page = ctx.session.mode === 'summary'
       ? (ctx.session.summaryPage || 0) + 1
-      : (ctx.session.listPage    || 0) + 1;
+      : (ctx.session.listPage || 0) + 1;
     return renderCategoryMenu(ctx, page);
   }, 'nextPage'));
 
@@ -109,6 +189,8 @@ function registerNavigationHandlers(bot) {
     resetFlow(ctx);
     ensureSession(ctx);
     ctx.session.mode = null;
+    ctx.session.selectedCategory = null;
+    ctx.session.selectedBrand = null;
     return ctx.reply('Главное меню', mainMenu(ctx));
   }, 'back'));
 
@@ -116,37 +198,69 @@ function registerNavigationHandlers(bot) {
     if (!await ensureRegistered(ctx)) return;
     await ctx.answerCbQuery();
     ensureSession(ctx);
+
+    if (ctx.session.mode === 'brand_list') {
+      ctx.session.mode = 'list';
+      ctx.session.selectedCategory = null;
+      ctx.session.selectedBrand = null;
+      return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    }
+
+    if (ctx.session.selectedCategory) {
+      return renderBrandMenu(ctx, ctx.session.selectedCategory, ctx.session.brandPage || 0, true);
+    }
+
     const page = ctx.session.mode === 'summary' ? ctx.session.summaryPage || 0 : ctx.session.listPage || 0;
     return renderCategoryMenu(ctx, page);
   }, 'back_categories'));
 
-  // ── Category Excel export ─────────────────────────────────────────────────
+  bot.action(/brandPage_(.+?)__(\d+)/, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    let categoryName;
+    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
+    const page = Number(ctx.match[2]) || 0;
+    return renderBrandMenu(ctx, categoryName, page, true);
+  }, 'brandPage'));
+
+  bot.action(/brandSelect_(.+?)__(.*)/, safe(async (ctx) => {
+    await ctx.answerCbQuery();
+    let categoryName;
+    let brandName;
+    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
+    try { brandName = decodeURIComponent(ctx.match[2]); } catch { brandName = ctx.match[2]; }
+
+    ensureSession(ctx);
+    ctx.session.selectedCategory = categoryName;
+    ctx.session.selectedBrand = brandName || null;
+    return renderEquipmentList(ctx, categoryName, brandName || null, 0, true);
+  }, 'brandSelect'));
+
   bot.action(/excelCategory_(.+)/, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
-    await ctx.answerCbQuery('Генерирую Excel…');
+    await ctx.answerCbQuery('Генерирую Excel...');
     let categoryName;
     try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
     const items = await listEquipmentByCategory(categoryName);
     if (!items.length) return ctx.reply(`Нет оборудования в категории ${categoryName}`);
-    const buffer   = await buildCategoryXlsx(categoryName, items);
+    const buffer = await buildCategoryXlsx(categoryName, items);
     const safeName = categoryName.replace(/[\\/:*?"<>|]/g, '_');
     return ctx.replyWithDocument({ source: buffer, filename: `category-${safeName}.xlsx` });
   }, 'excelCategory'));
 
-  // ── Category items pagination ─────────────────────────────────────────────
-  bot.action(/itemsPage_(.+)_(\d+)/, safe(async (ctx) => {
+  bot.action(/itemsPage_(.+?)__(.*?)__(\d+)/, safe(async (ctx) => {
     await ctx.answerCbQuery();
+
     let categoryName;
+    let brandName;
     try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
-    const page  = Number(ctx.match[2]) || 0;
-    const items = await listEquipmentByCategory(categoryName);
-    if (!items.length) return ctx.editMessageText(`Нет оборудования в категории ${categoryName}`);
-    return ctx.editMessageText(`📦 ${categoryName}`, buildCategoryItemsKeyboard(items, page));
+    try { brandName = decodeURIComponent(ctx.match[2]); } catch { brandName = ctx.match[2]; }
+
+    const page = Number(ctx.match[3]) || 0;
+    return renderEquipmentList(ctx, categoryName, brandName || null, page, true);
   }, 'itemsPage'));
 
   bot.action('noop', (ctx) => ctx.answerCbQuery());
 
-  // ── User management (admin only) ──────────────────────────────────────────
   bot.hears(LABELS.manageUsers, safe(async (ctx) => {
     if (!isEffectiveAdmin(ctx)) return ctx.reply('Нет прав.', mainMenu(ctx));
     const { users, totalPages } = await listAllUsersPaged({ page: 0 });
@@ -187,7 +301,6 @@ function registerNavigationHandlers(bot) {
     return ctx.editMessageText(`✅ Роль пользователя ${name} изменена на: ${newRole}`);
   }, 'set_role'));
 
-  // ── Catch-all text — check if it matches a category name ─────────────────
   bot.hears(/.*/, safe(async (ctx, next) => {
     if (!await ensureRegistered(ctx)) return;
     const text = ctx.message?.text;
@@ -195,22 +308,21 @@ function registerNavigationHandlers(bot) {
     ensureSession(ctx);
     if (ctx.session.flow) return next();
 
-    const MENU_TEXTS = [
+    const menuTexts = [
       LABELS.back, LABELS.previousPage, LABELS.nextPage,
-      LABELS.categories, LABELS.summary,
+      LABELS.categories, LABELS.myEquipment, LABELS.summary,
       LABELS.addEquipment, LABELS.profile, LABELS.manageUsers,
     ];
-    if (MENU_TEXTS.includes(text)) return next();
+    if (menuTexts.includes(text)) return next();
 
     const categories = await listCategories();
     if (!categories.includes(text)) return next();
 
-    const items = await listEquipmentByCategory(text);
-
     if (ctx.session.mode === 'summary') {
-      const loading = await ctx.reply('Генерируется изображение, подождите…');
+      const items = await listEquipmentByCategory(text);
+      const loading = await ctx.reply('Генерируется изображение, подождите...');
       try {
-        const buf      = await createCategoryImage(text, items);
+        const buf = await createCategoryImage(items);
         const safeName = text.replace(/[\\/:*?"<>|]/g, '_');
         const response = await ctx.replyWithPhoto(
           { source: buf, filename: `category-${safeName}.png` },
@@ -225,7 +337,7 @@ function registerNavigationHandlers(bot) {
       }
     }
 
-    return ctx.reply(`📦 ${text}`, buildCategoryItemsKeyboard(items, 0));
+    return renderBrandMenu(ctx, text, 0);
   }, 'catchAll'));
 }
 

@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const { redis } = require('../../redis');
 const logger = require('../../utils/logger');
@@ -33,7 +33,7 @@ function createRateLimiter({ windowMs = 60_000, maxCalls = 30, label = 'global' 
         return;
       }
     } catch (err) {
-      // Redis unavailable — fail open so users are never blocked by infrastructure issues
+      // Redis unavailable: fail open so users are never blocked by infrastructure issues.
       logger.warn({ err: err.message }, 'Rate limiter Redis error, skipping');
     }
 

@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const { getSuggestionsForField } = require('../../repositories/equipment.repo');
 const logger = require('../../utils/logger');
@@ -36,7 +36,7 @@ function normalizeOptionalValue(text) {
   return value;
 }
 
-// Kept for backward-compat — no-ops since hints come from DB directly
+// Kept for backward compatibility. No-ops since hints come from DB directly.
 function rememberEquipmentHint() {}
 function rememberEquipmentHints() {}
 

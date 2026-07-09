@@ -12,7 +12,7 @@ describe('validateEquipmentCreate', () => {
       model: 'XPS 13',
       serial_number: 'SN-001',
       purchase_date: '2024-01-15',
-      notes: 'Новый',
+      components: ['Чехол', 'Зарядка'],
     });
     assert.equal(result.success, true);
   });
@@ -84,12 +84,12 @@ describe('validateEquipmentCreate', () => {
     assert.equal(result.success, false);
   });
 
-  it('rejects notes exceeding 500 chars', () => {
+  it('rejects too many components', () => {
     const result = validateEquipmentCreate({
       category: 'Ноутбуки',
       model: 'Model',
       serial_number: 'SN-009',
-      notes: 'X'.repeat(501),
+      components: new Array(21).fill('Item'),
     });
     assert.equal(result.success, false);
   });
@@ -112,7 +112,7 @@ describe('validateEquipmentUpdate', () => {
   });
 
   it('accepts null values for optional fields in update', () => {
-    const result = validateEquipmentUpdate({ notes: null });
+    const result = validateEquipmentUpdate({ components: null });
     assert.equal(result.success, true);
   });
 });

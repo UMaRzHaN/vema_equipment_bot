@@ -36,7 +36,7 @@ async function getEquipmentHistory(equipmentId, limit = 10) {
 }
 
 async function getLastActionDate(equipmentId, actions) {
-  const placeholders = actions.map((_, i) => `$${i + 2}`).join(', ');
+  const placeholders = actions.map((_, index) => `$${index + 2}`).join(', ');
   const result = await query(
     `SELECT action_date
      FROM history
@@ -53,7 +53,7 @@ async function getLastRepairComment(equipmentId) {
   const result = await query(
     `SELECT comment
      FROM history
-     WHERE equipment_id = $1 AND action = 'в ремонт'
+     WHERE equipment_id = $1 AND action = 'в ремонте'
      ORDER BY action_date DESC
      LIMIT 1`,
     [equipmentId],
@@ -63,9 +63,10 @@ async function getLastRepairComment(equipmentId) {
 
 async function getEquipmentTimelinesBatch(equipmentIds) {
   if (!equipmentIds.length) return new Map();
+
   const result = await query(
     `SELECT equipment_id,
-            MAX(CASE WHEN action = 'выдано'     THEN action_date END) AS last_issue_date,
+            MAX(CASE WHEN action = 'выдано' THEN action_date END) AS last_issue_date,
             MAX(CASE WHEN action = 'возвращено' THEN action_date END) AS last_return_date,
             MAX(CASE WHEN action = 'из ремонта' THEN action_date END) AS last_repair_date
      FROM history
@@ -74,13 +75,14 @@ async function getEquipmentTimelinesBatch(equipmentIds) {
      GROUP BY equipment_id`,
     [equipmentIds],
   );
+
   return new Map(
-    result.rows.map((r) => [
-      r.equipment_id,
+    result.rows.map((row) => [
+      row.equipment_id,
       {
-        lastIssueDate:  r.last_issue_date  || null,
-        lastReturnDate: r.last_return_date || null,
-        lastRepairDate: r.last_repair_date || null,
+        lastIssueDate: row.last_issue_date || null,
+        lastReturnDate: row.last_return_date || null,
+        lastRepairDate: row.last_repair_date || null,
       },
     ]),
   );
@@ -88,25 +90,39 @@ async function getEquipmentTimelinesBatch(equipmentIds) {
 
 async function getLastRepairCommentsBatch(equipmentIds) {
   if (!equipmentIds.length) return new Map();
+
   const result = await query(
     `SELECT DISTINCT ON (equipment_id) equipment_id, comment
      FROM history
-     WHERE equipment_id = ANY($1) AND action = 'в ремонт'
+     WHERE equipment_id = ANY($1) AND action = 'в ремонте'
      ORDER BY equipment_id, action_date DESC`,
     [equipmentIds],
   );
-  return new Map(result.rows.map((r) => [r.equipment_id, r.comment || null]));
+
+  return new Map(result.rows.map((row) => [row.equipment_id, row.comment || null]));
 }
 
 async function getOverdueEquipment(thresholdDays) {
   const result = await query(
-    `SELECT e.id, e.category, e.brand, e.model,
+    `SELECT e.id,
+            e.category,
+            e.brand,
+            e.model,
             e.serial_number,
-            e.current_holder_user_id, e.current_issue_date
+            e.components,
+            e.current_holder_user_id,
+            e.current_issue_date,
+            e.expected_return_date
      FROM equipment e
      WHERE e.status = 'у пользователя'
        AND e.current_issue_date IS NOT NULL
-       AND e.current_issue_date < NOW() - ($1 || ' days')::INTERVAL`,
+       AND (
+         (e.expected_return_date IS NOT NULL AND e.expected_return_date < NOW())
+         OR (
+           e.expected_return_date IS NULL
+           AND e.current_issue_date < NOW() - ($1 || ' days')::INTERVAL
+         )
+       )`,
     [thresholdDays],
   );
   return result.rows;

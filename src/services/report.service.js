@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const ExcelJS = require('exceljs');
 const fs = require('fs');
@@ -6,9 +6,38 @@ const path = require('path');
 const PImage = require('pureimage');
 const { Writable } = require('stream');
 const { getEquipmentStats, listAllEquipment } = require('./equipment.service');
-const { getEquipmentTimelinesBatch, getLastRepairCommentsBatch } = require('./history.service');
+const { getEquipmentTimelinesBatch } = require('./history.service');
 const { formatUser, getUsersByTelegramIds } = require('./user.service');
-const { escapeHtml, formatDate, formatDateOnly, padString, statusLabel } = require('../utils/formatters');
+const { formatDate, formatDateOnly, statusLabel } = require('../utils/formatters');
+const { formatComponent, normalizeComponents } = require('../utils/components');
+
+const DEFAULT_BRAND = 'Без бренда';
+const DEFAULT_WAREHOUSE = 'Ташкент';
+const EMPTY_TIMELINE = { lastIssueDate: null, lastReturnDate: null, lastRepairDate: null };
+
+function sortByBrandThenModel(items) {
+  return [...items].sort((a, b) => {
+    const brandOrder = (a.brand || DEFAULT_BRAND).localeCompare(b.brand || DEFAULT_BRAND, 'ru');
+    if (brandOrder !== 0) return brandOrder;
+
+    const modelOrder = (a.model || '').localeCompare(b.model || '', 'ru');
+    if (modelOrder !== 0) return modelOrder;
+
+    return String(a.serial_number || '').localeCompare(String(b.serial_number || ''), 'ru');
+  });
+}
+
+function groupByBrand(items) {
+  const groups = new Map();
+
+  for (const item of sortByBrandThenModel(items)) {
+    const brand = item.brand || DEFAULT_BRAND;
+    if (!groups.has(brand)) groups.set(brand, []);
+    groups.get(brand).push(item);
+  }
+
+  return [...groups.entries()];
+}
 
 async function buildSummaryText() {
   const items = await listAllEquipment();
@@ -16,17 +45,16 @@ async function buildSummaryText() {
   const categoriesSorted = [...stats.byCategory.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru'));
 
   const lines = categoriesSorted.map(
-    ([name, cs]) =>
-      `${name}:\n • Всего: ${cs.total}\n • На складе: ${cs.inStock}\n • У пользователя: ${cs.withUser}\n • В ремонте: ${cs.repair}`,
+    ([name, categoryStats]) =>
+      `${name}:\n • Всего: ${categoryStats.total}\n • На складе: ${categoryStats.inStock}\n • У пользователя: ${categoryStats.withUser}\n • В ремонте: ${categoryStats.repair}`,
   );
 
   return `📊 Сводка по оборудованию\n\n${lines.join('\n\n') || 'Категории: -'}`;
 }
 
 function findSystemFontPath() {
-  const candidates = [
-    path.join(__dirname, '../../assets/fonts/DejaVuSans.ttf'),
-  ];
+  const candidates = [path.join(__dirname, '../../assets/fonts/DejaVuSans.ttf')];
+
   if (process.platform === 'win32') {
     const winDir = process.env.WINDIR || process.env.SYSTEMROOT;
     if (winDir) {
@@ -34,6 +62,7 @@ function findSystemFontPath() {
       candidates.push(path.join(winDir, 'Fonts', 'calibri.ttf'));
     }
   }
+
   candidates.push(
     '/usr/share/fonts/dejavu/DejaVuSans.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
@@ -41,43 +70,79 @@ function findSystemFontPath() {
     '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
     '/usr/share/fonts/TTF/DejaVuSans.ttf',
   );
-  return candidates.find((p) => fs.existsSync(p));
+
+  return candidates.find((filePath) => fs.existsSync(filePath));
 }
 
 let reportFontPromise = null;
+
 function getReportFont() {
   if (reportFontPromise) return reportFontPromise;
+
   reportFontPromise = new Promise((resolve, reject) => {
     const fontPath = findSystemFontPath();
-    if (!fontPath) { reject(new Error('System font not found for image rendering')); return; }
+    if (!fontPath) {
+      reject(new Error('System font not found for image rendering'));
+      return;
+    }
+
     const font = PImage.registerFont(fontPath, 'ReportFont');
     font.loadSync();
     resolve(font);
   });
+
   return reportFontPromise;
 }
 
-async function createCategoryImage(categoryName, items) {
+function truncateText(ctx, text, maxWidth) {
+  let result = String(text);
+  if (ctx.measureText(result).width <= maxWidth) return result;
+
+  while (result.length > 0 && ctx.measureText(`${result}…`).width > maxWidth) {
+    result = result.slice(0, -1);
+  }
+
+  return `${result}…`;
+}
+
+async function buildReportMaps(items) {
+  const equipmentIds = items.map((item) => item.id);
+  const holderIds = [...new Set(items.map((item) => item.current_holder_user_id).filter(Boolean))];
+
+  const [timelinesMap, usersMap] = await Promise.all([
+    getEquipmentTimelinesBatch(equipmentIds),
+    getUsersByTelegramIds(holderIds),
+  ]);
+
+  return { timelinesMap, usersMap };
+}
+
+function formatComponentsText(components) {
+  const normalized = normalizeComponents(components);
+  return normalized.length ? normalized.map(formatComponent).join(', ') : '-';
+}
+
+async function createCategoryImage(items) {
   await getReportFont();
 
+  const grouped = groupByBrand(items);
   const rowHeight = 34;
+  const brandRowHeight = 30;
   const padding = 24;
   const columns = [
-    { title: '№',           width: 60  },
-    { title: 'Оборудование', width: 320 },
-    { title: 'Склад',       width: 140 },
-    { title: 'Статус',      width: 120 },
+    { title: '№', width: 60 },
+    { title: 'Оборудование', width: 280 },
+    { title: 'Комплект', width: 220 },
+    { title: 'Склад', width: 140 },
+    { title: 'Статус', width: 120 },
     { title: 'Пользователь', width: 170 },
-    { title: 'Выдано',      width: 140 },
-    { title: 'Сдано',       width: 140 },
-    { title: 'Ремонт',      width: 140 },
-    { title: 'Комментарий', width: 220 },
+    { title: 'Выдано', width: 140 },
   ];
 
-  const width  = columns.reduce((s, c) => s + c.width, 0) + padding * 2;
-  const height = padding * 2 + rowHeight * (items.length + 1);
-  const image  = PImage.make(width, height);
-  const ctx    = image.getContext('2d');
+  const width = columns.reduce((sum, column) => sum + column.width, 0) + padding * 2;
+  const height = padding * 2 + rowHeight + (grouped.length * brandRowHeight) + (items.length * rowHeight);
+  const image = PImage.make(width, height);
+  const ctx = image.getContext('2d');
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
@@ -87,149 +152,127 @@ async function createCategoryImage(categoryName, items) {
   ctx.font = '18pt ReportFont';
 
   let x = padding;
-  for (const col of columns) { ctx.fillText(col.title, x + 4, padding + 24); x += col.width; }
+  for (const column of columns) {
+    ctx.fillText(column.title, x + 4, padding + 24);
+    x += column.width;
+  }
 
-  // Batch-fetch all timeline, comment, and user data — 3 parallel queries total
-  const ids       = items.map((i) => i.id);
-  const holderIds = [...new Set(items.map((i) => i.current_holder_user_id).filter(Boolean))];
-  const EMPTY_TIMELINE = { lastIssueDate: null, lastReturnDate: null, lastRepairDate: null };
-
-  const [timelinesMap, commentsMap, usersMap] = await Promise.all([
-    getEquipmentTimelinesBatch(ids),
-    getLastRepairCommentsBatch(ids),
-    getUsersByTelegramIds(holderIds),
-  ]);
+  const { usersMap } = await buildReportMaps(items);
 
   let y = padding + rowHeight;
-  for (let idx = 0; idx < items.length; idx++) {
-    const item = items[idx];
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(padding, y, width - padding * 2, rowHeight);
-    ctx.fillStyle = '#000000'; ctx.font = '16pt ReportFont';
+  let index = 1;
 
-    const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
-    const holder   = item.current_holder_user_id
-      ? formatUser(usersMap.get(item.current_holder_user_id))
-      : '-';
+  for (const [brand, brandItems] of grouped) {
+    ctx.fillStyle = '#dfe8f5';
+    ctx.fillRect(padding, y, width - padding * 2, brandRowHeight);
+    ctx.fillStyle = '#000000';
+    ctx.font = '16pt ReportFont';
+    ctx.fillText(`Бренд: ${brand}`, padding + 6, y + 21);
+    y += brandRowHeight;
 
-    const rowVals = [
-      String(idx + 1),
-      `${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`,
-      item.warehouse || 'Ташкент',
-      statusLabel(item.status),
-      holder,
-      formatDate(item.current_issue_date),
-      formatDate(timeline.lastReturnDate),
-      formatDate(timeline.lastRepairDate),
-      commentsMap.get(item.id) || '-',
-    ];
+    for (const item of brandItems) {
+      const holder = item.current_holder_user_id ? formatUser(usersMap.get(item.current_holder_user_id)) : '-';
+      const rowValues = [
+        String(index),
+        `${item.model || '-'} - ${item.serial_number || '-'}`,
+        formatComponentsText(item.components),
+        item.warehouse || DEFAULT_WAREHOUSE,
+        statusLabel(item.status),
+        holder,
+        formatDate(item.current_issue_date),
+      ];
 
-    x = padding;
-    for (let i = 0; i < columns.length; i++) {
-      const val = truncateText(ctx, rowVals[i], columns[i].width - 12);
-      ctx.fillText(val, x + 4, y + 24);
-      x += columns[i].width;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(padding, y, width - padding * 2, rowHeight);
+      ctx.fillStyle = '#000000';
+      ctx.font = '15pt ReportFont';
+
+      x = padding;
+      for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+        const value = truncateText(ctx, rowValues[columnIndex], columns[columnIndex].width - 12);
+        ctx.fillText(value, x + 4, y + 23);
+        x += columns[columnIndex].width;
+      }
+
+      y += rowHeight;
+      index += 1;
     }
-    y += rowHeight;
   }
 
   const chunks = [];
-  const writable = new Writable({ write(chunk, _, cb) { chunks.push(Buffer.from(chunk)); cb(); } });
+  const writable = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(Buffer.from(chunk));
+      callback();
+    },
+  });
+
   await PImage.encodePNGToStream(image, writable);
   return Buffer.concat(chunks);
-}
-
-async function createWarehouseImage(city) {
-  await getReportFont();
-
-  const padding = 24;
-  const width = 760;
-  const height = 220;
-  const image = PImage.make(width, height);
-  const ctx = image.getContext('2d');
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = '#f7f7f7';
-  ctx.fillRect(padding, padding, width - padding * 2, height - padding * 2);
-  ctx.fillStyle = '#000000';
-  ctx.font = '22pt ReportFont';
-  const label = `Склад: ${city}`;
-  ctx.fillText(label, padding + 6, padding + 60);
-
-  const subtitle = 'Оборудование возвращено на склад';
-  ctx.font = '14pt ReportFont';
-  ctx.fillText(subtitle, padding + 6, padding + 110);
-
-  const chunks = [];
-  const writable = new Writable({ write(chunk, _, cb) { chunks.push(Buffer.from(chunk)); cb(); } });
-  await PImage.encodePNGToStream(image, writable);
-  return Buffer.concat(chunks);
-}
-
-function truncateText(ctx, text, maxWidth) {
-  let result = String(text);
-  if (ctx.measureText(result).width <= maxWidth) return result;
-  while (result.length > 0 && ctx.measureText(`${result}…`).width > maxWidth) {
-    result = result.slice(0, -1);
-  }
-  return `${result}…`;
 }
 
 async function buildCategoryXlsx(categoryName, items) {
   const workbook = new ExcelJS.Workbook();
-  const sheet    = workbook.addWorksheet(String(categoryName).slice(0, 31));
+  const sheet = workbook.addWorksheet(String(categoryName).slice(0, 31));
 
   sheet.columns = [
-    { header: '№',               key: 'position',              width: 8  },
-    { header: 'Категория',       key: 'category',              width: 20 },
-    { header: 'Бренд',           key: 'brand',                 width: 24 },
-    { header: 'Модель',          key: 'model',                 width: 18 },
-    { header: 'Склад',           key: 'warehouse',             width: 18 },
-    { header: 'Серийный номер',  key: 'serial_number',         width: 18 },
-    { header: 'Дата покупки',    key: 'purchase_date',         width: 18 },
-    { header: 'Статус',          key: 'status',                width: 14 },
-    { header: 'Пользователь',    key: 'holder',                width: 18 },
-    { header: 'Дата выдачи',     key: 'current_issue_date',    width: 20 },
-    { header: 'Дата сдачи',      key: 'last_return_date',      width: 20 },
-    { header: 'Дата ремонта',    key: 'last_repair_date',      width: 20 },
-    { header: 'Комментарий',     key: 'repair_comment',        width: 30 },
+    { header: '№', key: 'position', width: 3 },
+    { header: 'Категория', key: 'category', width: 20 },
+    { header: 'Бренд', key: 'brand', width: 24 },
+    { header: 'Модель', key: 'model', width: 20 },
+    { header: 'Комплектующие', key: 'components', width: 34 },
+    { header: 'Склад', key: 'warehouse', width: 18 },
+    { header: 'Серийный номер', key: 'serial_number', width: 20 },
+    { header: 'Дата покупки', key: 'purchase_date', width: 18 },
+    { header: 'Статус', key: 'status', width: 16 },
+    { header: 'Пользователь', key: 'holder', width: 22 },
+    { header: 'Дата выдачи', key: 'current_issue_date', width: 20 },
+    { header: 'Дата сдачи', key: 'last_return_date', width: 20 },
+    { header: 'Дата ремонта', key: 'last_repair_date', width: 20 },
   ];
 
-  // Batch-fetch all timeline, comment, and user data — 3 parallel queries total
-  const ids       = items.map((i) => i.id);
-  const holderIds = [...new Set(items.map((i) => i.current_holder_user_id).filter(Boolean))];
-  const EMPTY_TIMELINE = { lastIssueDate: null, lastReturnDate: null, lastRepairDate: null };
+  const { timelinesMap, usersMap } = await buildReportMaps(items);
+  let index = 1;
 
-  const [timelinesMap, commentsMap, usersMap] = await Promise.all([
-    getEquipmentTimelinesBatch(ids),
-    getLastRepairCommentsBatch(ids),
-    getUsersByTelegramIds(holderIds),
-  ]);
+  for (const [brand, brandItems] of groupByBrand(items)) {
+    const brandRow = sheet.addRow({ category: `Бренд: ${brand}` });
+    sheet.mergeCells(`A${brandRow.number}:M${brandRow.number}`);
+    brandRow.font = { bold: true };
+    brandRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'DCE6F2' },
+    };
 
-  for (let idx = 0; idx < items.length; idx++) {
-    const item     = items[idx];
-    const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
-    const holder   = item.current_holder_user_id
-      ? formatUser(usersMap.get(item.current_holder_user_id))
-      : '';
-    sheet.addRow({
-      position:           idx + 1,
-      category:           item.category || '',
-      brand:              item.brand || '',
-      model:              item.model || '',
-      serial_number:      item.serial_number || '',
-      warehouse:          item.warehouse || 'Ташкент',
-      purchase_date:      formatDateOnly(item.purchase_date),
-      status:             statusLabel(item.status),
-      holder,
-      current_issue_date: formatDate(item.current_issue_date),
-      last_return_date:   formatDate(timeline.lastReturnDate),
-      last_repair_date:   formatDate(timeline.lastRepairDate),
-      repair_comment:     commentsMap.get(item.id) || '',
-    });
+    for (const item of brandItems) {
+      const timeline = timelinesMap.get(item.id) || EMPTY_TIMELINE;
+      const holder = item.current_holder_user_id ? formatUser(usersMap.get(item.current_holder_user_id)) : '';
+      const componentsText = formatComponentsText(item.components);
+
+      sheet.addRow({
+        position: index,
+        category: item.category || '',
+        brand: item.brand || '',
+        model: item.model || '',
+        components: componentsText === '-' ? '' : componentsText,
+        serial_number: item.serial_number || '',
+        warehouse: item.warehouse || DEFAULT_WAREHOUSE,
+        purchase_date: formatDateOnly(item.purchase_date),
+        status: statusLabel(item.status),
+        holder,
+        current_issue_date: formatDate(item.current_issue_date),
+        last_return_date: formatDate(timeline.lastReturnDate),
+        last_repair_date: formatDate(timeline.lastRepairDate),
+      });
+      index += 1;
+    }
   }
 
   return workbook.xlsx.writeBuffer();
 }
 
-module.exports = { buildCategoryXlsx, buildSummaryText, createCategoryImage, createWarehouseImage };
+module.exports = {
+  buildCategoryXlsx,
+  buildSummaryText,
+  createCategoryImage,
+};

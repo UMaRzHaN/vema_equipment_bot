@@ -1,14 +1,26 @@
-'use strict';
+﻿'use strict';
 
 const { z } = require('zod');
 
+const componentSchema = z.union([
+  z.string().min(1).max(100).transform((name) => ({ name, qty: 1 })),
+  z.object({
+    name: z.string().min(1).max(100),
+    qty: z.number().int().min(1).max(99),
+  }),
+]);
+
+const categorySchema = z.string()
+  .min(1, '\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044e')
+  .max(100);
+
 const equipmentCreateSchema = z.object({
-  category:         z.string().min(1, 'Укажите категорию').max(100),
-  brand:            z.string().max(100).optional().nullable(),
-  model:            z.string().min(1, 'Укажите модель').max(100),
-  serial_number:    z.string().min(1, 'Укажите серийный номер').max(100),
-  purchase_date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Формат даты: YYYY-MM-DD').optional().nullable(),
-  notes:            z.string().max(500).optional().nullable(),
+  category: categorySchema,
+  brand: z.string().max(100).optional().nullable(),
+  model: z.string().min(1, 'Укажите модель').max(100),
+  serial_number: z.string().min(1, 'Укажите серийный номер').max(100),
+  purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Формат даты: YYYY-MM-DD').optional().nullable(),
+  components: z.array(componentSchema).max(20).optional().nullable(),
 });
 
 const equipmentUpdateSchema = equipmentCreateSchema.partial();

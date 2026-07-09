@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,6 +12,8 @@ const state = {
   deleteImpl:         async () => {},
   getEquipmentPageImpl: async () => [],
   countEquipmentImpl: async () => 0,
+  getDistinctBrandsByCategoryImpl: async () => [],
+  getEquipmentByCategoryAndBrandImpl: async () => [],
 };
 
 const repoStub = {
@@ -21,7 +23,9 @@ const repoStub = {
   createEquipment:       async (...args) => state.createImpl(...args),
   deleteEquipmentById:   async (...args) => state.deleteImpl(...args),
   getAllEquipment:        async () => [],
+  getDistinctBrandsByCategory: async (...args) => state.getDistinctBrandsByCategoryImpl(...args),
   getEquipmentPage:      async (...args) => state.getEquipmentPageImpl(...args),
+  getEquipmentByCategoryAndBrand: async (...args) => state.getEquipmentByCategoryAndBrandImpl(...args),
   countEquipment:        async (...args) => state.countEquipmentImpl(...args),
   updateEquipmentDetails: async () => {},
   searchEquipment:       async () => [],
@@ -81,9 +85,10 @@ describe('addEquipment', () => {
 
   it('includes all provided fields', async () => {
     const created = await service.addEquipment({
-      category: 'Принтеры', model: 'HP', serial_number: 'SN-Y', brand: 'Hewlett',
+      category: 'Принтеры', model: 'HP', serial_number: 'SN-Y', brand: 'Hewlett', components: ['Кабель'],
     });
     assert.equal(created.brand, 'Hewlett');
+    assert.deepEqual(created.components, ['Кабель']);
   });
 
   it('wraps 23505 pg error as DUPLICATE_SERIAL', async () => {
@@ -129,6 +134,20 @@ describe('listEquipmentPaged', () => {
   });
 });
 
+describe('category brand navigation', () => {
+  it('returns brand list for category', async () => {
+    state.getDistinctBrandsByCategoryImpl = async (category) => ['FLIR', `for-${category}`];
+    const result = await service.listBrandsByCategory('Камеры');
+    assert.deepEqual(result, ['FLIR', 'for-Камеры']);
+  });
+
+  it('returns equipment filtered by category and brand', async () => {
+    state.getEquipmentByCategoryAndBrandImpl = async (category, brand) => [{ id: 5, category, brand }];
+    const result = await service.listEquipmentByCategoryAndBrand('Камеры', 'FLIR');
+    assert.deepEqual(result, [{ id: 5, category: 'Камеры', brand: 'FLIR' }]);
+  });
+});
+
 // ── removeEquipment ───────────────────────────────────────────────────────────
 describe('removeEquipment', () => {
   it('calls deleteEquipmentById with the given id', async () => {
@@ -138,3 +157,4 @@ describe('removeEquipment', () => {
     assert.equal(deletedId, 99);
   });
 });
+

@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const logger = require('../../utils/logger');
 
@@ -17,7 +17,7 @@ function safe(fn, label = 'handler') {
     try {
       return await fn(ctx, ...args);
     } catch (err) {
-      logger.error(`[${label}] error`, { err: err.message, stack: err.stack, userId: ctx.from?.id });
+      logger.error({ err: err.message, stack: err.stack, userId: ctx.from?.id }, `[${label}] error`);
       try {
         if (ctx.callbackQuery) {
           await ctx.answerCbQuery('Произошла ошибка.', { show_alert: true }).catch(() => {});
@@ -25,7 +25,7 @@ function safe(fn, label = 'handler') {
           await ctx.reply('⚠️ Произошла ошибка. Попробуйте ещё раз.').catch(() => {});
         }
       } catch (_) {
-        // secondary error — ignore
+        // Secondary error: ignore.
       }
     }
   };

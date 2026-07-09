@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const path = require("path");
 const {
   copyDatabase,
@@ -284,3 +284,4 @@ run().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+

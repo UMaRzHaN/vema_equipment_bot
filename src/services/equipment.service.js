@@ -8,14 +8,15 @@ const {
   findEquipmentById,
   findEquipmentBySerial,
   getAllEquipment,
+  getDistinctBrandsByCategory,
   getDistinctCategories,
+  getEquipmentByCategoryAndBrand,
   getEquipmentByCategoryName,
   getEquipmentPage,
   updateEquipmentDetails,
 } = require('../repositories/equipment.repo');
 const { STATUS } = require('../utils/constants');
 
-// 60-second in-process cache — avoids a full table scan on every catchAll message
 const _catCache = { value: null, expiresAt: 0 };
 const CATEGORIES_TTL_MS = 60_000;
 
@@ -39,14 +40,22 @@ async function listEquipmentPaged({ page = 0, limit = 20 } = {}) {
 async function listCategories() {
   const now = Date.now();
   if (_catCache.value && now < _catCache.expiresAt) return _catCache.value;
-  const cats = await getDistinctCategories();
-  _catCache.value    = cats;
+  const categories = await getDistinctCategories();
+  _catCache.value = categories;
   _catCache.expiresAt = now + CATEGORIES_TTL_MS;
-  return cats;
+  return categories;
 }
 
 async function listEquipmentByCategory(categoryName) {
   return getEquipmentByCategoryName(categoryName);
+}
+
+async function listBrandsByCategory(categoryName) {
+  return getDistinctBrandsByCategory(categoryName);
+}
+
+async function listEquipmentByCategoryAndBrand(categoryName, brandName) {
+  return getEquipmentByCategoryAndBrand(categoryName, brandName);
 }
 
 async function getEquipmentStats(items) {
@@ -61,23 +70,31 @@ async function getEquipmentStats(items) {
   };
 
   for (const item of all) {
-    if (item.status === STATUS.IN_STOCK)    stats.inStock    += 1;
-    else if (item.status === STATUS.WITH_USER)  stats.withUser   += 1;
-    else if (item.status === STATUS.REPAIR)     stats.repair     += 1;
+    if (item.status === STATUS.IN_STOCK) stats.inStock += 1;
+    else if (item.status === STATUS.WITH_USER) stats.withUser += 1;
+    else if (item.status === STATUS.REPAIR) stats.repair += 1;
     else if (item.status === STATUS.WRITTEN_OFF) stats.writtenOff += 1;
 
-    const cat = item.category || 'Без категории';
-    const cs = stats.byCategory.get(cat) || { total: 0, inStock: 0, withUser: 0, repair: 0, writtenOff: 0 };
-    cs.total += 1;
-    if (item.status === STATUS.IN_STOCK)    cs.inStock    += 1;
-    else if (item.status === STATUS.WITH_USER)  cs.withUser   += 1;
-    else if (item.status === STATUS.REPAIR)     cs.repair     += 1;
-    else if (item.status === STATUS.WRITTEN_OFF) cs.writtenOff += 1;
-    stats.byCategory.set(cat, cs);
+    const category = item.category || 'Без категории';
+    const categoryStats = stats.byCategory.get(category) || {
+      total: 0,
+      inStock: 0,
+      withUser: 0,
+      repair: 0,
+      writtenOff: 0,
+    };
+
+    categoryStats.total += 1;
+    if (item.status === STATUS.IN_STOCK) categoryStats.inStock += 1;
+    else if (item.status === STATUS.WITH_USER) categoryStats.withUser += 1;
+    else if (item.status === STATUS.REPAIR) categoryStats.repair += 1;
+    else if (item.status === STATUS.WRITTEN_OFF) categoryStats.writtenOff += 1;
+
+    stats.byCategory.set(category, categoryStats);
   }
+
   return stats;
 }
-
 
 async function addEquipment(data) {
   try {
@@ -101,21 +118,68 @@ async function removeEquipment(id) {
   invalidateCategoriesCache();
 }
 
-async function giveEquipmentToUser(equipment, userId) {
+async function giveEquipmentToUser(equipment, userId, components = [], expectedReturnDate = null) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.WITH_USER, current_holder_user_id: userId, current_issue_date: new Date().toISOString() },
-      { equipment_id: equipment.id, action: 'выдано', from_status: STATUS.IN_STOCK, to_status: STATUS.WITH_USER, to_user_id: userId, performed_by_user_id: userId },
+      {
+        id: equipment.id,
+        status: STATUS.WITH_USER,
+        current_holder_user_id: userId,
+        current_issue_date: new Date().toISOString(),
+        expected_return_date: expectedReturnDate,
+        components,
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'выдано',
+        from_status: STATUS.IN_STOCK,
+        to_status: STATUS.WITH_USER,
+        to_user_id: userId,
+        performed_by_user_id: userId,
+      },
     );
   } catch (err) {
-    if (err.code === 'STATUS_CONFLICT') throw Object.assign(new Error('Оборудование уже недоступно.'), { code: 'STATUS_CONFLICT' });
+    if (err.code === 'STATUS_CONFLICT') {
+      throw Object.assign(new Error('Оборудование уже недоступно.'), { code: 'STATUS_CONFLICT' });
+    }
     throw err;
   }
   return findEquipmentById(equipment.id);
 }
 
+async function extendEquipmentForUser(equipment, userId, expectedReturnDate) {
+  try {
+    await atomicStatusChange(
+      {
+        id: equipment.id,
+        status: STATUS.WITH_USER,
+        current_holder_user_id: equipment.current_holder_user_id,
+        current_issue_date: equipment.current_issue_date,
+        expected_return_date: expectedReturnDate,
+        components: equipment.components || [],
+        warehouse: equipment.warehouse || null,
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'срок продлен',
+        from_status: STATUS.WITH_USER,
+        to_status: STATUS.WITH_USER,
+        from_user_id: userId,
+        to_user_id: userId,
+        performed_by_user_id: userId,
+        comment: expectedReturnDate ? `Новый срок до ${new Date(expectedReturnDate).toISOString()}` : null,
+      },
+    );
+  } catch (err) {
+    throw wrapStatusConflict(err);
+  }
+  return findEquipmentById(equipment.id);
+}
+
 function wrapStatusConflict(err) {
-  if (err.code === 'STATUS_CONFLICT') return Object.assign(new Error('Статус оборудования изменился. Обновите карточку.'), { code: 'STATUS_CONFLICT' });
+  if (err.code === 'STATUS_CONFLICT') {
+    return Object.assign(new Error('Статус оборудования изменился. Обновите карточку.'), { code: 'STATUS_CONFLICT' });
+  }
   return err;
 }
 
@@ -127,7 +191,9 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
         status: STATUS.IN_STOCK,
         current_holder_user_id: null,
         current_issue_date: null,
+        expected_return_date: null,
         warehouse: warehouse || 'Ташкент',
+        components: [],
       },
       {
         equipment_id: equipment.id,
@@ -138,37 +204,85 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
         performed_by_user_id: userId,
       },
     );
-  } catch (err) { throw wrapStatusConflict(err); }
+  } catch (err) {
+    throw wrapStatusConflict(err);
+  }
   return findEquipmentById(equipment.id);
 }
 
 async function startRepair(equipment, performedByUserId, comment) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.REPAIR, current_holder_user_id: null, current_issue_date: null },
-      { equipment_id: equipment.id, action: 'в ремонт', from_status: equipment.status, to_status: STATUS.REPAIR, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
+      {
+        id: equipment.id,
+        status: STATUS.REPAIR,
+        current_holder_user_id: null,
+        current_issue_date: null,
+        expected_return_date: null,
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'в ремонте',
+        from_status: equipment.status,
+        to_status: STATUS.REPAIR,
+        from_user_id: equipment.current_holder_user_id,
+        performed_by_user_id: performedByUserId,
+        comment: comment || null,
+      },
     );
-  } catch (err) { throw wrapStatusConflict(err); }
+  } catch (err) {
+    throw wrapStatusConflict(err);
+  }
   return findEquipmentById(equipment.id);
 }
 
 async function completeRepair(equipment, performedByUserId) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.IN_STOCK, current_holder_user_id: null, current_issue_date: null },
-      { equipment_id: equipment.id, action: 'из ремонта', from_status: STATUS.REPAIR, to_status: STATUS.IN_STOCK, performed_by_user_id: performedByUserId },
+      {
+        id: equipment.id,
+        status: STATUS.IN_STOCK,
+        current_holder_user_id: null,
+        current_issue_date: null,
+        expected_return_date: null,
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'из ремонта',
+        from_status: STATUS.REPAIR,
+        to_status: STATUS.IN_STOCK,
+        performed_by_user_id: performedByUserId,
+      },
     );
-  } catch (err) { throw wrapStatusConflict(err); }
+  } catch (err) {
+    throw wrapStatusConflict(err);
+  }
   return findEquipmentById(equipment.id);
 }
 
 async function writeOffEquipment(equipment, performedByUserId, comment) {
   try {
     await atomicStatusChange(
-      { id: equipment.id, status: STATUS.WRITTEN_OFF, current_holder_user_id: null, current_issue_date: null },
-      { equipment_id: equipment.id, action: 'списано', from_status: equipment.status, to_status: STATUS.WRITTEN_OFF, from_user_id: equipment.current_holder_user_id, performed_by_user_id: performedByUserId, comment: comment || null },
+      {
+        id: equipment.id,
+        status: STATUS.WRITTEN_OFF,
+        current_holder_user_id: null,
+        current_issue_date: null,
+        expected_return_date: null,
+      },
+      {
+        equipment_id: equipment.id,
+        action: 'списано',
+        from_status: equipment.status,
+        to_status: STATUS.WRITTEN_OFF,
+        from_user_id: equipment.current_holder_user_id,
+        performed_by_user_id: performedByUserId,
+        comment: comment || null,
+      },
     );
-  } catch (err) { throw wrapStatusConflict(err); }
+  } catch (err) {
+    throw wrapStatusConflict(err);
+  }
   return findEquipmentById(equipment.id);
 }
 
@@ -179,10 +293,13 @@ module.exports = {
   findEquipmentById,
   findEquipmentBySerial,
   getEquipmentStats,
+  extendEquipmentForUser,
   giveEquipmentToUser,
   invalidateCategoriesCache,
   listAllEquipment,
+  listBrandsByCategory,
   listCategories,
+  listEquipmentByCategoryAndBrand,
   listEquipmentByCategory,
   listEquipmentPaged,
   removeEquipment,

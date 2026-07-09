@@ -6,9 +6,9 @@ const { FLOW_TYPE } = require('../fsm/states');
 const { getUserByTelegramId } = require('../../services/user.service');
 
 const ROLE_LABELS = {
-  user:    '👤 Пользователь',
+  user: '👤 Пользователь',
   manager: '📋 Менеджер',
-  admin:   '👑 Администратор',
+  admin: '👑 Администратор',
 };
 
 async function renderProfileCard(ctx) {

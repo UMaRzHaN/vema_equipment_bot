@@ -1,0 +1,164 @@
+"use strict";
+
+function normalizeKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function qty(name, count) {
+  return { name, qty: count };
+}
+
+function normalizePresetEntry(entry) {
+  if (typeof entry === "string") {
+    const name = entry.trim();
+    return name ? { name, qty: 1 } : null;
+  }
+
+  if (!entry || typeof entry !== "object") return null;
+
+  const name = String(entry.name || "").trim();
+  const count = Number(entry.qty);
+  if (!name) return null;
+
+  return {
+    name,
+    qty: Number.isInteger(count) && count > 0 ? count : 1,
+  };
+}
+
+function normalizePresetEntries(entries = []) {
+  const merged = new Map();
+
+  for (const rawEntry of entries) {
+    const entry = normalizePresetEntry(rawEntry);
+    if (!entry) continue;
+    merged.set(entry.name, entry.qty);
+  }
+
+  return Array.from(merged.entries()).map(([name, count]) => ({
+    name,
+    qty: count,
+  }));
+}
+
+function extractNames(entries = []) {
+  return normalizePresetEntries(entries).map((entry) => entry.name);
+}
+
+function getQtyMap(entries = []) {
+  return Object.fromEntries(
+    normalizePresetEntries(entries).map((entry) => [entry.name, entry.qty]),
+  );
+}
+
+function preset({ single = [], quantity = [], minimal = [], full = [] }) {
+  return {
+    single: normalizePresetEntries(single),
+    quantity: normalizePresetEntries(quantity),
+    minimal: normalizePresetEntries(minimal),
+    full: normalizePresetEntries(full),
+  };
+}
+
+const BATTERIES_X2 = qty("Батарейка", 2);
+
+const CAMERA_PRESET = preset({
+  single: ["Штатив","Анемометр", "Дальнометр", "Кабель HDMI", "Кабель HDMI-мини"],
+  quantity: [BATTERIES_X2],
+  minimal: [BATTERIES_X2],
+  full: [BATTERIES_X2, "Штатив", "Анемометр", "Дальнометр"],
+});
+
+const LAPTOP_PRESET = preset({
+  single: ["Зарядка", "Мышка", "Переходник", "Кабель HDMI", "Кабель HDMI-мини"],
+  minimal: ["Зарядка", "Мышка", "Переходник"],
+});
+
+const GENERIC_PRESET = preset({
+  single: ["Зарядка", "Переходник"],
+  quantity: [BATTERIES_X2],
+  minimal: ["Зарядка", "Мышка", "Переходник"],
+});
+
+const CATEGORY_PRESETS = {
+  camera: CAMERA_PRESET,
+  laptop: LAPTOP_PRESET,
+  generic: GENERIC_PRESET,
+};
+
+const MODEL_PRESETS = {};
+
+function detectCategoryKey(item) {
+  const haystack =
+    `${item.category || ""} ${item.model || ""} ${item.brand || ""}`.toLowerCase();
+  if (haystack.includes("камер") || haystack.includes("camera")) {
+    return "camera";
+  }
+  if (haystack.includes("ноут") || haystack.includes("laptop")) return "laptop";
+  return "generic";
+}
+
+function mergePreset(basePreset, overridePreset = {}) {
+  const singleEntries = normalizePresetEntries(
+    overridePreset.single ?? basePreset.singleEntries ?? basePreset.single,
+  );
+  const quantityEntries = normalizePresetEntries(
+    overridePreset.quantity ??
+      basePreset.quantityEntries ??
+      basePreset.quantity,
+  );
+  const minimalEntries = normalizePresetEntries(
+    overridePreset.minimal ?? basePreset.minimalEntries ?? basePreset.minimal,
+  );
+  const fullEntries = normalizePresetEntries(
+    overridePreset.full ?? basePreset.fullEntries ?? basePreset.full,
+  );
+
+  return {
+    singleEntries,
+    quantityEntries,
+    minimalEntries,
+    fullEntries,
+  };
+}
+
+function getGiveComponentsPreset(item) {
+  const categoryKey = detectCategoryKey(item);
+  const modelKey = normalizeKey(`${item.brand || ""} ${item.model || ""}`);
+
+  const basePreset = CATEGORY_PRESETS[categoryKey] || CATEGORY_PRESETS.generic;
+  const modelPreset = MODEL_PRESETS[modelKey];
+
+  const resolved = mergePreset(basePreset, modelPreset || {});
+
+  return {
+    single: extractNames(resolved.singleEntries),
+    quantity: extractNames(resolved.quantityEntries),
+    minimal: resolved.minimalEntries,
+    full: resolved.fullEntries,
+    defaultQtyByName: {
+      ...getQtyMap(resolved.singleEntries),
+      ...getQtyMap(resolved.quantityEntries),
+      ...getQtyMap(resolved.fullEntries),
+    },
+  };
+}
+
+function buildPresetComponents(entries = []) {
+  return normalizePresetEntries(entries);
+}
+
+function isQuantityComponent(name, presetValue) {
+  return (
+    Array.isArray(presetValue?.quantity) && presetValue.quantity.includes(name)
+  );
+}
+
+module.exports = {
+  buildPresetComponents,
+  detectCategoryKey,
+  getGiveComponentsPreset,
+  isQuantityComponent,
+};

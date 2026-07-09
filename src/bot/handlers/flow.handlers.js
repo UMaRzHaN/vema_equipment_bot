@@ -1,44 +1,64 @@
-'use strict';
+﻿'use strict';
 
+const { Markup } = require('telegraf');
 const { isEffectiveAdmin, isEffectiveManager } = require('../config');
 const logger = require('../../utils/logger');
 const { safe } = require('../middlewares/error.handler');
 const { EDITABLE_FIELDS, LABELS } = require('../labels');
 const { validateEquipmentCreate, validateEquipmentUpdate } = require('../validation/equipment.schema');
-const { buildBackKeyboard, mainMenu } = require('../views/menus');
+const {
+  buildBackKeyboard,
+  buildGiveComponentsKeyboard,
+  mainMenu,
+} = require('../views/menus');
 const { buildEquipmentMarkup, renderEquipmentCard } = require('../views/equipment.view');
+const { finalizeGiveCart } = require('./equipment.handlers');
 const { ensureSession, resetFlow } = require('../utils');
 const { FLOW_TYPE, ADD_STEP, EDIT_STEP, TOTAL_ADD_STEPS } = require('../fsm/states');
 const { makeFlow } = require('../fsm/session.schema');
+const { STATUS } = require('../../utils/constants');
 const {
   addEquipment,
+  extendEquipmentForUser,
   findEquipmentById,
   findEquipmentBySerial,
+  listAllEquipment,
   startRepair,
   updateEquipment,
   writeOffEquipment,
   returnEquipmentFromUser,
 } = require('../../services/equipment.service');
-const { createWarehouseImage } = require('../../services/report.service');
 const { getCityByCoordinates } = require('../../services/location.service');
 const {
   getEquipmentSuggestionText,
   normalizeOptionalValue,
 } = require('../helpers/equipmentHints');
 const { equipmentActionsTotal } = require('../../utils/metrics');
+const { formatDate } = require('../../utils/formatters');
+const { getGiveComponentsPreset } = require('../../utils/component-presets');
 
 const MAX_INPUT = 500;
-const DATE_RE   = /^\d{2}\.\d{2}\.\d{4}$/;
+const DATE_RE = /^\d{2}\.\d{2}\.\d{4}$/;
 
-function isValidDate(v) {
-  if (!DATE_RE.test(v)) return false;
-  const [d, m, y] = v.split('.').map(Number);
-  return !Number.isNaN(new Date(y, m - 1, d).getTime());
+function isValidDate(value) {
+  if (!DATE_RE.test(value)) return false;
+  const [day, month, year] = value.split('.').map(Number);
+  return !Number.isNaN(new Date(year, month - 1, day).getTime());
 }
 
-function parseDMY(v) {
-  const [d, m, y] = v.split('.').map(Number);
-  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+function parseDMY(value) {
+  const [day, month, year] = value.split('.').map(Number);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseComponentsInput(value) {
+  const normalized = normalizeOptionalValue(value);
+  if (!normalized || ['-', 'нет', 'none'].includes(normalized.toLowerCase())) return [];
+  return normalized
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 function stepLabel(step) {
@@ -60,25 +80,27 @@ async function sendAddPrompt(ctx, step) {
   const category = ctx.session?.flow?.data?.category || null;
   switch (step) {
     case ADD_STEP.CATEGORY: {
-      const p = await getEquipmentSuggestionText('category', `${stepLabel(step)} Введите категорию:`);
-      return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
+      const prompt = await getEquipmentSuggestionText('category', `${stepLabel(step)} Введите категорию:`);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.BRAND: {
-      const p = await getEquipmentSuggestionText('brand', `${stepLabel(step)} Введите бренд:`, category);
-      return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
+      const prompt = await getEquipmentSuggestionText('brand', `${stepLabel(step)} Введите бренд:`, category);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.MODEL: {
-      const p = await getEquipmentSuggestionText('model', `${stepLabel(step)} Введите модель:`, category);
-      return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
+      const prompt = await getEquipmentSuggestionText('model', `${stepLabel(step)} Введите модель:`, category);
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
     case ADD_STEP.SERIAL:
       return ctx.reply(`${stepLabel(step)} Введите серийный номер:`, buildBackKeyboard());
     case ADD_STEP.PURCHASE_DATE: {
-      const p = await getEquipmentSuggestionText('purchase_date', `${stepLabel(step)} Введите дату покупки (ДД.ММ.ГГГГ) или оставьте пустым:`, category);
-      return ctx.reply(p.text, mergeWithBackKeyboard(p.options));
+      const prompt = await getEquipmentSuggestionText(
+        'purchase_date',
+        `${stepLabel(step)} Введите дату покупки (ДД.ММ.ГГГГ) или оставьте пустым:`,
+        category,
+      );
+      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
     }
-    case ADD_STEP.NOTES:
-      return ctx.reply(`${stepLabel(step)} Введите примечания или оставьте пустым:`, buildBackKeyboard());
     default:
       return ctx.reply('Введите значение:', buildBackKeyboard());
   }
@@ -91,13 +113,44 @@ function rememberMessage(message) {
 
 async function safeDelete(ctx, ref, label) {
   if (!ref) return;
-  try { await ctx.telegram.deleteMessage(ref.chatId, ref.messageId); }
-  catch (err) { logger.warn({ label, err: err.message }, 'safeDelete failed'); }
+  try {
+    await ctx.telegram.deleteMessage(ref.chatId, ref.messageId);
+  } catch (err) {
+    logger.warn({ label, err: err.message }, 'safeDelete failed');
+  }
 }
 
-// ── Add Equipment flow ────────────────────────────────────────────────────────
+async function finalizeAddEquipment(ctx, data) {
+  const validation = validateEquipmentCreate(data);
+  if (!validation.success) {
+    resetFlow(ctx);
+    const message = validation.error.errors.map((entry) => entry.message).join(', ');
+    return ctx.reply(`Ошибка данных: ${message}. Начните заново.`, mainMenu(ctx));
+  }
+
+  try {
+    const created = await addEquipment(validation.data);
+    equipmentActionsTotal.inc({ action: 'created' });
+    resetFlow(ctx);
+    const markup = buildEquipmentMarkup(created, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+    const card = await renderEquipmentCard(created);
+    await ctx.reply('✅ Оборудование добавлено успешно.');
+    return ctx.reply(card, markup || mainMenu(ctx));
+  } catch (err) {
+    logger.error({ err: err.message }, 'Create equipment error');
+    resetFlow(ctx);
+    if (err.message === 'DUPLICATE_SERIAL') {
+      return ctx.reply('Серийный номер уже существует. Начните заново.', mainMenu(ctx));
+    }
+    return ctx.reply('Не удалось добавить оборудование.', mainMenu(ctx));
+  }
+}
+
 async function handleAddEquipment(ctx, text, flow) {
-  if (text === LABELS.back) { resetFlow(ctx); return ctx.reply('Добавление отменено.', mainMenu(ctx)); }
+  if (text === LABELS.back) {
+    resetFlow(ctx);
+    return ctx.reply('Добавление отменено.', mainMenu(ctx));
+  }
 
   const data = flow.data || {};
 
@@ -128,37 +181,14 @@ async function handleAddEquipment(ctx, text, flow) {
       return sendAddPrompt(ctx, ADD_STEP.PURCHASE_DATE);
 
     case ADD_STEP.PURCHASE_DATE: {
-      const dateVal = normalizeOptionalValue(text);
-      if (dateVal && !isValidDate(dateVal)) return ctx.reply('Неверный формат даты. Используйте ДД.ММ.ГГГГ или оставьте пустым:');
-      data.purchase_date = dateVal ? parseDMY(dateVal) : null;
-      ctx.session.flow = makeFlow(FLOW_TYPE.ADD_EQUIPMENT, ADD_STEP.NOTES, data);
-      return sendAddPrompt(ctx, ADD_STEP.NOTES);
-    }
-
-    case ADD_STEP.NOTES:
-      data.notes = normalizeOptionalValue(text);
-      {
-        const validation = validateEquipmentCreate(data);
-        if (!validation.success) {
-          resetFlow(ctx);
-          const msg = validation.error.errors.map((e) => e.message).join(', ');
-          return ctx.reply(`Ошибка данных: ${msg}. Начните заново.`, mainMenu(ctx));
-        }
-        try {
-          const created = await addEquipment(validation.data);
-          equipmentActionsTotal.inc({ action: 'created' });
-          resetFlow(ctx);
-          const markup = buildEquipmentMarkup(created, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
-          const card   = await renderEquipmentCard(created);
-          await ctx.reply('✅ Оборудование добавлено успешно.');
-          return ctx.reply(card, markup || mainMenu(ctx));
-        } catch (err) {
-          logger.error({ err: err.message }, 'Create equipment error');
-          resetFlow(ctx);
-          if (err.message === 'DUPLICATE_SERIAL') return ctx.reply('Серийный номер уже существует. Начните заново.', mainMenu(ctx));
-          return ctx.reply('Не удалось добавить оборудование.', mainMenu(ctx));
-        }
+      const dateValue = normalizeOptionalValue(text);
+      if (dateValue && !isValidDate(dateValue)) {
+        return ctx.reply('Неверный формат даты. Используйте ДД.ММ.ГГГГ или оставьте пустым:');
       }
+      data.purchase_date = dateValue ? parseDMY(dateValue) : null;
+      data.components = [];
+      return finalizeAddEquipment(ctx, data);
+    }
 
     default:
       resetFlow(ctx);
@@ -166,7 +196,6 @@ async function handleAddEquipment(ctx, text, flow) {
   }
 }
 
-// ── Repair flow ───────────────────────────────────────────────────────────────
 async function handleRepair(ctx, text, flow) {
   const equipment = await findEquipmentById(flow.equipmentId);
   if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
@@ -179,17 +208,244 @@ async function handleRepair(ctx, text, flow) {
   await safeDelete(ctx, flow.promptMessage, 'repair:prompt');
   resetFlow(ctx);
   await ctx.reply(`Отправлено в ремонт:\n${equipment.category} ${equipment.model} - ${equipment.serial_number}\nПричина: ${text}`);
-  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+  if (markup) {
+    return ctx.reply(await renderEquipmentCard(updated), markup);
+  } else {
+    return ctx.reply(await renderEquipmentCard(updated), mainMenu(ctx));
+  }
+}
+
+async function handleGiveDuration(ctx, text, flow) {
+  if (flow.extendAllMode) {
+    if (text === LABELS.back) {
+      await safeDelete(ctx, flow.promptMessage, 'extendAll:prompt');
+      resetFlow(ctx);
+      return ctx.reply('Продление отменено.', mainMenu(ctx));
+    }
+
+    if (!/^\d+$/.test(text)) {
+      return ctx.reply('Введите срок в днях целым числом, например: 5');
+    }
+
+    const durationDays = Number(text);
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      return ctx.reply('Введите срок от 1 до 365 дней.');
+    }
+
+    const allItems = await listAllEquipment();
+    const items = allItems.filter((item) =>
+      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
+      && item.status === STATUS.WITH_USER
+      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+
+    if (!items.length) {
+      resetFlow(ctx);
+      return ctx.reply('Оборудование для продления не найдено.', mainMenu(ctx));
+    }
+
+    const extended = [];
+    for (const item of items) {
+      const baseDate = item.expected_return_date ? new Date(item.expected_return_date) : new Date();
+      const nextDate = baseDate > new Date() ? new Date(baseDate) : new Date();
+      nextDate.setDate(nextDate.getDate() + durationDays);
+      await extendEquipmentForUser(item, ctx.from.id, nextDate.toISOString());
+      equipmentActionsTotal.inc({ action: 'extended' });
+      extended.push({ item, expectedReturnDate: nextDate.toISOString() });
+    }
+
+    await safeDelete(ctx, flow.sourceMessage, 'extendAll:source');
+    await safeDelete(ctx, flow.promptMessage, 'extendAll:prompt');
+    resetFlow(ctx);
+
+    return ctx.reply(
+      `⏳ Продлено на ${durationDays} дн.:\n${extended.map(({ item, expectedReturnDate }) => `• ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'} (до ${formatDate(expectedReturnDate)})`).join('\n')}`,
+      mainMenu(ctx),
+    );
+  }
+
+  if (flow.extendMode) {
+    const equipment = await findEquipmentById(flow.equipmentId);
+    if (!equipment) {
+      resetFlow(ctx);
+      return ctx.reply('Оборудование не найдено.');
+    }
+
+    if (text === LABELS.back) {
+      await safeDelete(ctx, flow.promptMessage, 'extend:prompt');
+      resetFlow(ctx);
+      const markup = buildEquipmentMarkup(equipment, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+      return ctx.reply(await renderEquipmentCard(equipment), markup || mainMenu(ctx));
+    }
+
+    if (!/^\d+$/.test(text)) {
+      return ctx.reply('Введите срок в днях целым числом, например: 5');
+    }
+
+    const durationDays = Number(text);
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      return ctx.reply('Введите срок от 1 до 365 дней.');
+    }
+
+    const baseDate = equipment.expected_return_date ? new Date(equipment.expected_return_date) : new Date();
+    const nextDate = baseDate > new Date() ? new Date(baseDate) : new Date();
+    nextDate.setDate(nextDate.getDate() + durationDays);
+
+    const updated = await extendEquipmentForUser(equipment, ctx.from.id, nextDate.toISOString());
+    equipmentActionsTotal.inc({ action: 'extended' });
+    const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+
+    await safeDelete(ctx, flow.sourceMessage, 'extend:source');
+    await safeDelete(ctx, flow.promptMessage, 'extend:prompt');
+    resetFlow(ctx);
+
+    await ctx.reply(`⏳ Продлено на ${durationDays} дн. Новый срок: ${formatDate(nextDate.toISOString())}`);
+    return ctx.reply(await renderEquipmentCard(updated), markup || mainMenu(ctx));
+  }
+
+  if (flow.cartMode) {
+    if (text === LABELS.back) {
+      await safeDelete(ctx, flow.promptMessage, 'give:cartDurationPrompt');
+      resetFlow(ctx);
+      return ctx.reply('Выдача из корзины отменена.', mainMenu(ctx));
+    }
+
+    if (!/^\d+$/.test(text)) {
+      return ctx.reply('Введите общий срок в днях целым числом, например: 5');
+    }
+
+    const durationDays = Number(text);
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      return ctx.reply('Введите срок от 1 до 365 дней.');
+    }
+
+    ensureSession(ctx);
+    if (!ctx.session.giveCart?.items?.length) {
+      resetFlow(ctx);
+      return ctx.reply('Корзина пуста.', mainMenu(ctx));
+    }
+
+    const expectedReturnDate = new Date();
+    expectedReturnDate.setDate(expectedReturnDate.getDate() + durationDays);
+    ctx.session.giveCart.items = ctx.session.giveCart.items.map((item) => ({
+      ...item,
+      durationDays,
+      expectedReturnDate: expectedReturnDate.toISOString(),
+    }));
+
+    await safeDelete(ctx, flow.promptMessage, 'give:cartDurationPrompt');
+    resetFlow(ctx);
+    return finalizeGiveCart(ctx);
+  }
+
+  const equipment = await findEquipmentById(flow.equipmentId);
+  if (!equipment) {
+    resetFlow(ctx);
+    return ctx.reply('Оборудование не найдено.');
+  }
+
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'give:durationPrompt');
+    resetFlow(ctx);
+    const markup = buildEquipmentMarkup(equipment, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+    return ctx.reply(await renderEquipmentCard(equipment), markup || mainMenu(ctx));
+  }
+
+  if (!/^\d+$/.test(text)) {
+    return ctx.reply('Введите срок в днях целым числом, например: 5');
+  }
+
+  const durationDays = Number(text);
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+    return ctx.reply('Введите срок от 1 до 365 дней.');
+  }
+
+  const expectedReturnDate = new Date();
+  expectedReturnDate.setDate(expectedReturnDate.getDate() + durationDays);
+  const preset = getGiveComponentsPreset(equipment);
+
+  const selectionMessage = await ctx.reply(
+    [
+      `📦 Выдача: ${equipment.category || '-'} ${equipment.model || '-'} - ${equipment.serial_number || '-'}`,
+      '',
+      `Срок: ${durationDays} дн. (до ${formatDate(expectedReturnDate.toISOString())})`,
+      '',
+      'Выберите комплектующие в отдельном сообщении:',
+      'Можно быстро нажать "Минимум" или "Полный комплект".',
+      '',
+      'Сейчас выбрано:',
+      '• Пока ничего не выбрано',
+    ].join('\n'),
+    buildGiveComponentsKeyboard(equipment.id, preset, []),
+  );
+
+  ctx.session.flow = makeFlow(
+    FLOW_TYPE.GIVE_COMPONENTS,
+    1,
+    {
+      components: [],
+      preset,
+      durationDays,
+      expectedReturnDate: expectedReturnDate.toISOString(),
+    },
+    {
+      equipmentId: flow.equipmentId,
+      sourceMessage: flow.sourceMessage,
+      promptMessage: flow.promptMessage,
+      selectionMessage: rememberMessage(selectionMessage),
+    },
+  );
+
+  return selectionMessage;
 }
 
 async function handleReturnLocation(ctx, text, flow) {
+  if (flow.returnAllMode) {
+    if (text === LABELS.back) {
+      await safeDelete(ctx, flow.promptMessage, 'returnAll:prompt');
+      resetFlow(ctx);
+      return ctx.reply('Возврат отменен.', mainMenu(ctx));
+    }
+
+    const warehouse = text?.trim();
+    if (!warehouse) {
+      return ctx.reply('Введите город склада, куда возвращаете оборудование:');
+    }
+
+    const allItems = await listAllEquipment();
+    const items = allItems.filter((item) =>
+      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
+      && item.status === STATUS.WITH_USER
+      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+
+    if (!items.length) {
+      resetFlow(ctx);
+      return ctx.reply('Оборудование для возврата не найдено.');
+    }
+
+    const returned = [];
+    for (const item of items) {
+      await returnEquipmentFromUser(item, ctx.from.id, warehouse);
+      equipmentActionsTotal.inc({ action: 'returned' });
+      returned.push(item);
+    }
+
+    await safeDelete(ctx, flow.sourceMessage, 'returnAll:source');
+    await safeDelete(ctx, flow.promptMessage, 'returnAll:prompt');
+    resetFlow(ctx);
+
+    return ctx.reply(
+      `✅ Возвращено на склад ${warehouse}:\n${returned.map((item) => `• ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`).join('\n')}`,
+      mainMenu(ctx),
+    );
+  }
+
   const equipment = await findEquipmentById(flow.equipmentId);
   if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
 
   if (text === LABELS.back) {
     await safeDelete(ctx, flow.promptMessage, 'return:prompt');
     resetFlow(ctx);
-    return ctx.reply('Возврат отменён.', mainMenu(ctx));
+    return ctx.reply('Возврат отменен.', mainMenu(ctx));
   }
 
   const warehouse = text?.trim();
@@ -205,13 +461,51 @@ async function handleReturnLocation(ctx, text, flow) {
   await safeDelete(ctx, flow.promptMessage, 'return:prompt');
   resetFlow(ctx);
 
-  await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`);
-  const img = await createWarehouseImage(warehouse);
-  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${warehouse}.png` }, { caption: `Склад: ${warehouse}` });
-  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${warehouse}`, mainMenu(ctx));
+  if (markup) {
+    return ctx.reply(await renderEquipmentCard(updated), markup);
+  }
+  return ctx.reply(await renderEquipmentCard(updated));
 }
 
 async function handleReturnLocationWithGeo(ctx, flow) {
+  if (flow.returnAllMode) {
+    const location = ctx.message.location;
+    if (!location) return ctx.reply('Пожалуйста, отправьте локацию склада или введите город вручную.');
+
+    const city = await getCityByCoordinates(location.latitude, location.longitude);
+    if (!city) {
+      return ctx.reply('Не удалось определить город по локации. Введите город склада вручную:');
+    }
+
+    const allItems = await listAllEquipment();
+    const items = allItems.filter((item) =>
+      Array.isArray(flow.equipmentIds) && flow.equipmentIds.includes(item.id)
+      && item.status === STATUS.WITH_USER
+      && Number(item.current_holder_user_id) === Number(ctx.from.id));
+
+    if (!items.length) {
+      resetFlow(ctx);
+      return ctx.reply('Оборудование для возврата не найдено.');
+    }
+
+    const returned = [];
+    for (const item of items) {
+      await returnEquipmentFromUser(item, ctx.from.id, city);
+      equipmentActionsTotal.inc({ action: 'returned' });
+      returned.push(item);
+    }
+
+    await safeDelete(ctx, flow.sourceMessage, 'returnAll:source');
+    await safeDelete(ctx, flow.promptMessage, 'returnAll:prompt');
+    resetFlow(ctx);
+
+    return ctx.reply(
+      `✅ Возвращено на склад ${city}:\n${returned.map((item) => `• ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}`).join('\n')}`,
+      mainMenu(ctx),
+    );
+  }
+
   const equipment = await findEquipmentById(flow.equipmentId);
   if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
 
@@ -231,13 +525,13 @@ async function handleReturnLocationWithGeo(ctx, flow) {
   await safeDelete(ctx, flow.promptMessage, 'return:prompt');
   resetFlow(ctx);
 
-  await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`);
-  const img = await createWarehouseImage(city);
-  await ctx.replyWithPhoto({ source: img, filename: `Склад. ${city}.png` }, { caption: `Склад: ${city}` });
-  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+  await ctx.reply(`✅ Оборудование возвращено на склад: ${city}`, mainMenu(ctx));
+  if (markup) {
+    return ctx.reply(await renderEquipmentCard(updated), markup);
+  }
+  return ctx.reply(await renderEquipmentCard(updated));
 }
 
-// ── Write-off flow ────────────────────────────────────────────────────────────
 async function handleWriteoff(ctx, text, flow) {
   const equipment = await findEquipmentById(flow.equipmentId);
   if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
@@ -251,26 +545,36 @@ async function handleWriteoff(ctx, text, flow) {
   await safeDelete(ctx, flow.promptMessage, 'writeoff:prompt');
   resetFlow(ctx);
   await ctx.reply(`Оборудование списано:\n${equipment.category} ${equipment.model} - ${equipment.serial_number}`);
-  return ctx.reply(await renderEquipmentCard(updated), markup || undefined);
+  if (markup) {
+    return ctx.reply(await renderEquipmentCard(updated), markup);
+  } else {
+    return ctx.reply(await renderEquipmentCard(updated), mainMenu(ctx));
+  }
 }
 
-// ── Edit Equipment flow ───────────────────────────────────────────────────────
 async function handleEditEquipment(ctx, text, flow) {
   const equipment = await findEquipmentById(flow.equipmentId);
   if (!equipment) { resetFlow(ctx); return ctx.reply('Оборудование не найдено.'); }
 
-  // Step 1: select field
   if (flow.step === EDIT_STEP.SELECT_FIELD) {
     if (text === LABELS.back) {
       await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
       resetFlow(ctx);
       return ctx.reply('Редактирование отменено.', mainMenu(ctx));
     }
-    const field = EDITABLE_FIELDS[text];
-    if (!field) return ctx.reply('Пожалуйста, выберите поле из списка или нажмите 🔙 Назад.');
 
-    const promptSuffix = field === 'purchase_date' ? ' (ДД.ММ.ГГГГ)' : '';
-    const promptMsg = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());
+    const field = EDITABLE_FIELDS[text];
+    if (!field) return ctx.reply('Пожалуйста, выберите поле из списка или нажмите Назад.');
+    if (field === 'components' && equipment.status !== STATUS.WITH_USER) {
+      return ctx.reply('Комплектующие можно заполнять только когда оборудование у пользователя.');
+    }
+
+    const promptSuffix = field === 'purchase_date'
+      ? ' (ДД.ММ.ГГГГ)'
+      : field === 'components'
+        ? ' (через запятую)'
+        : '';
+    const promptMessage = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());
     ctx.session.flow = {
       type: FLOW_TYPE.EDIT_EQUIPMENT,
       step: EDIT_STEP.ENTER_VALUE,
@@ -278,49 +582,73 @@ async function handleEditEquipment(ctx, text, flow) {
       sourceMessage: flow.sourceMessage,
       selectorMessage: flow.selectorMessage,
       data: { field, fieldLabel: text },
-      promptMessage: rememberMessage(promptMsg),
+      promptMessage: rememberMessage(promptMessage),
       startedAt: flow.startedAt,
       version: flow.version,
     };
-    return promptMsg;
+    return promptMessage;
   }
 
-  // Step 2: enter value
   if (text === LABELS.back) {
     await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
-    await safeDelete(ctx, flow.promptMessage,  'edit:prompt');
+    await safeDelete(ctx, flow.promptMessage, 'edit:prompt');
     resetFlow(ctx);
     return ctx.reply('Редактирование отменено.', mainMenu(ctx));
   }
 
   const { field } = flow.data;
-
   let inputValue = text || null;
+
   if (field === 'purchase_date' && inputValue) {
     if (!isValidDate(inputValue)) return ctx.reply('Неверный формат даты. Используйте ДД.ММ.ГГГГ:');
     inputValue = parseDMY(inputValue);
   }
 
-  // Validate via Zod before touching the DB
-  const valResult = validateEquipmentUpdate({ [field]: inputValue });
-  if (!valResult.success) return ctx.reply(`Неверное значение: ${valResult.error.errors[0]?.message}`);
+  if (field === 'components') {
+    if (equipment.status !== STATUS.WITH_USER) {
+      return ctx.reply('Комплектующие можно заполнять только когда оборудование у пользователя.');
+    }
+    inputValue = parseComponentsInput(text);
+  }
+
+  const validation = validateEquipmentUpdate({ [field]: inputValue });
+  if (!validation.success) {
+    return ctx.reply(`Неверное значение: ${validation.error.errors[0]?.message}`);
+  }
 
   if (field === 'serial_number') {
     const existing = await findEquipmentBySerial(text);
-    if (existing && Number(existing.id) !== Number(equipment.id)) return ctx.reply('Серийный номер уже существует. Введите другой:');
+    if (existing && Number(existing.id) !== Number(equipment.id)) {
+      return ctx.reply('Серийный номер уже существует. Введите другой:');
+    }
   }
 
   try {
     await updateEquipment(equipment.id, { [field]: inputValue });
     const updated = await findEquipmentById(equipment.id);
-    const markup  = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
+    const markup = buildEquipmentMarkup(updated, { canAdmin: isEffectiveAdmin(ctx), canRepair: isEffectiveManager(ctx) });
 
-    await safeDelete(ctx, flow.sourceMessage,   'edit:source');
+    await safeDelete(ctx, flow.sourceMessage, 'edit:source');
     await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
-    await safeDelete(ctx, flow.promptMessage,   'edit:prompt');
+    await safeDelete(ctx, flow.promptMessage, 'edit:prompt');
     resetFlow(ctx);
-    await ctx.reply('Данные обновлены.');
-    return ctx.reply(await renderEquipmentCard(updated), markup || mainMenu(ctx));
+    await ctx.reply('Данные обновлены.', mainMenu(ctx));
+
+    logger.info(
+      {
+        equipmentId: updated.id,
+        status: updated.status,
+        canAdmin: isEffectiveAdmin(ctx),
+        canRepair: isEffectiveManager(ctx),
+        hasMarkup: Boolean(markup),
+      },
+      'Equipment updated',
+    );
+
+    if (markup) {
+      return ctx.reply(await renderEquipmentCard(updated), markup);
+    }
+    return ctx.reply(await renderEquipmentCard(updated));
   } catch (err) {
     logger.error({ err: err.message }, 'Update equipment error');
     resetFlow(ctx);
@@ -328,7 +656,6 @@ async function handleEditEquipment(ctx, text, flow) {
   }
 }
 
-// ── Main FSM router ───────────────────────────────────────────────────────────
 function registerFlowHandlers(bot) {
   bot.on('location', safe(async (ctx, next) => {
     ensureSession(ctx);
@@ -346,16 +673,27 @@ function registerFlowHandlers(bot) {
     const flow = ctx.session.flow;
     if (!flow) return next();
 
-    // Menu button pressed while inside a flow (except Back) → exit flow
-    const MENU_LABELS = [LABELS.categories, LABELS.addEquipment, LABELS.summary, LABELS.profile];
-    if (MENU_LABELS.includes(text)) { resetFlow(ctx); return next(); }
+    const menuLabels = [LABELS.categories, LABELS.myEquipment, LABELS.addEquipment, LABELS.summary, LABELS.profile];
+    if (menuLabels.includes(text)) {
+      resetFlow(ctx);
+      return next();
+    }
 
     switch (flow.type) {
-      case FLOW_TYPE.ADD_EQUIPMENT:      return handleAddEquipment(ctx, text, flow);
-      case FLOW_TYPE.REPAIR:             return handleRepair(ctx, text, flow);
-      case FLOW_TYPE.WRITEOFF:           return handleWriteoff(ctx, text, flow);
-      case FLOW_TYPE.EDIT_EQUIPMENT:     return handleEditEquipment(ctx, text, flow);
-      case FLOW_TYPE.RETURN_LOCATION:    return handleReturnLocation(ctx, text, flow);
+      case FLOW_TYPE.ADD_EQUIPMENT:
+        return handleAddEquipment(ctx, text, flow);
+      case FLOW_TYPE.GIVE_DURATION:
+        return handleGiveDuration(ctx, text, flow);
+      case FLOW_TYPE.GIVE_COMPONENTS:
+        return ctx.reply('Для выбора комплектующих используйте кнопки под сообщением.');
+      case FLOW_TYPE.REPAIR:
+        return handleRepair(ctx, text, flow);
+      case FLOW_TYPE.WRITEOFF:
+        return handleWriteoff(ctx, text, flow);
+      case FLOW_TYPE.EDIT_EQUIPMENT:
+        return handleEditEquipment(ctx, text, flow);
+      case FLOW_TYPE.RETURN_LOCATION:
+        return handleReturnLocation(ctx, text, flow);
       default:
         resetFlow(ctx);
         return next();

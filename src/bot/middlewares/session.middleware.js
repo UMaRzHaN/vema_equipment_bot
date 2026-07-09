@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const { redis } = require('../../redis');
 const { config } = require('../../config');

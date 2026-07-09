@@ -40,19 +40,22 @@ function isValidPhone(phone) {
 
 function registerProfileHandlers(bot) {
   bot.hears('✏️ Имя', safe((ctx) => {
-    ensureSession(ctx); resetFlow(ctx);
+    ensureSession(ctx);
+    resetFlow(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'first_name' });
     return ctx.reply('Введите новое имя:', removeKeyboard());
   }, 'profile:editName'));
 
   bot.hears('✏️ Фамилия', safe((ctx) => {
-    ensureSession(ctx); resetFlow(ctx);
+    ensureSession(ctx);
+    resetFlow(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'last_name' });
     return ctx.reply('Введите новую фамилию:', removeKeyboard());
   }, 'profile:editLastName'));
 
   bot.hears('📱 Телефон', safe((ctx) => {
-    ensureSession(ctx); resetFlow(ctx);
+    ensureSession(ctx);
+    resetFlow(ctx);
     ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_PROFILE, 1, {}, { field: 'phone' });
     return ctx.reply('Введите номер или нажмите кнопку:', phoneKeyboard());
   }, 'profile:editPhone'));
@@ -83,6 +86,7 @@ function registerProfileHandlers(bot) {
       }
       throw err;
     }
+
     ctx.session = {};
     await ctx.editMessageText('✅ Профиль удалён.');
     return ctx.reply('Для повторной регистрации нажмите /start.');
@@ -94,7 +98,7 @@ function registerProfileHandlers(bot) {
     return renderProfileCard(ctx);
   }, 'profile:cancelDelete'));
 
-  // ── TEXT ──────────────────────────────────────────────────────────────────
+  // Text
   bot.on('text', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;
@@ -102,7 +106,7 @@ function registerProfileHandlers(bot) {
 
     const text = ctx.message.text.trim();
 
-    // ── register_profile flow ─────────────────────────────────────────────
+    // register_profile flow
     if (flow.type === 'register_profile') {
       if (flow.step === 1) {
         const phone = normalizePhone(text);
@@ -120,7 +124,10 @@ function registerProfileHandlers(bot) {
 
       if (flow.step === 3) {
         const { phone, firstName } = flow.data;
-        if (!phone || !firstName) { resetFlow(ctx); return ctx.reply('Сессия устарела. Начните регистрацию заново.'); }
+        if (!phone || !firstName) {
+          resetFlow(ctx);
+          return ctx.reply('Сессия устарела. Начните регистрацию заново.');
+        }
         await saveUser({ telegramId: ctx.from.id, firstName, lastName: text, phone });
         resetFlow(ctx);
         await ctx.reply('✅ Профиль сохранён', removeKeyboard());
@@ -128,18 +135,20 @@ function registerProfileHandlers(bot) {
       }
     }
 
-    // ── edit_profile flow ─────────────────────────────────────────────────
+    // edit_profile flow
     if (flow.type === 'edit_profile') {
       const user = await getUserByTelegramId(ctx.from.id);
       const updated = {
         telegramId: ctx.from.id,
-        firstName:  user.first_name,
-        lastName:   user.last_name,
-        phone:      user.phone,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
       };
+
       if (flow.field === 'first_name') updated.firstName = text;
-      if (flow.field === 'last_name')  updated.lastName  = text;
-      if (flow.field === 'phone')      updated.phone     = normalizePhone(text);
+      if (flow.field === 'last_name') updated.lastName = text;
+      if (flow.field === 'phone') updated.phone = normalizePhone(text);
+
       await saveUser(updated);
       resetFlow(ctx);
       await ctx.reply('✅ Обновлено', removeKeyboard());
@@ -149,16 +158,16 @@ function registerProfileHandlers(bot) {
     return next();
   }, 'profile:text'));
 
-  // ── CONTACT ───────────────────────────────────────────────────────────────
+  // Contact
   bot.on('contact', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;
     if (!flow) return next();
 
-    const contact      = ctx.message.contact;
-    const phone        = normalizePhone(contact.phone_number);
+    const contact = ctx.message.contact;
+    const phone = normalizePhone(contact.phone_number);
     const firstNameHint = contact.first_name?.trim() || null;
-    const lastNameHint  = contact.last_name?.trim()  || null;
+    const lastNameHint = contact.last_name?.trim() || null;
 
     if (flow.type === 'register_profile' && flow.step === 1) {
       ctx.session.flow = { ...flow, step: 2, data: { phone, firstNameHint, lastNameHint } };

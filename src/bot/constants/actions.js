@@ -1,46 +1,62 @@
 'use strict';
 
-/**
- * Константы callback_data для оборудования.
- * Используйте их вместо хардкодинга строк в коде.
- */
 const ACTIONS = {
-  // Просмотр и навигация
-  OPEN:          'open',
-  HISTORY:       'history',
-  BACK_TO_CARD:  'open', // alias для возврата к карточке
-
-  // Операции с оборудованием
-  GIVE:           'give',
-  RETURN:         'return',
-  REPAIR:         'repair',
-  FROM_REPAIR:    'fromRepair',
-  WRITEOFF:       'writeoff',
-  EDIT:           'edit',
-  DELETE:         'delete',
+  OPEN: 'open',
+  HISTORY: 'history',
+  BACK_TO_CARD: 'open',
+  GIVE: 'give',
+  SELECT_GIVE_DURATION: 'selectGiveDuration',
+  APPLY_GIVE_PRESET: 'applyGivePreset',
+  TOGGLE_GIVE_COMPONENT: 'toggleGiveComponent',
+  INCREMENT_GIVE_COMPONENT: 'incrementGiveComponent',
+  DECREMENT_GIVE_COMPONENT: 'decrementGiveComponent',
+  CLEAR_GIVE_COMPONENTS: 'clearGiveComponents',
+  FINISH_GIVE_COMPONENTS: 'finishGiveComponents',
+  BACK_TO_GIVE_COMPONENTS: 'backToGiveComponents',
+  CONFIRM_GIVE: 'confirmGive',
+  ADD_MORE_GIVE_CART: 'addMoreGiveCart',
+  CONFIRM_GIVE_CART: 'confirmGiveCart',
+  CLEAR_GIVE_CART: 'clearGiveCart',
+  REMOVE_FROM_GIVE_CART: 'removeFromGiveCart',
+  RETURN: 'return',
+  RETURN_ALL_MY: 'returnAllMy',
+  EXTEND: 'extend',
+  EXTEND_ALL_MY: 'extendAllMy',
+  REPAIR: 'repair',
+  FROM_REPAIR: 'fromRepair',
+  WRITEOFF: 'writeoff',
+  EDIT: 'edit',
+  DELETE: 'delete',
   CONFIRM_DELETE: 'confirmDelete',
-
-  // Редактирование полей
-  EDIT_CATEGORY:         'edit_category',
-  EDIT_MODEL:            'edit_model',
-  EDIT_SERIAL:           'edit_serial',
-  EDIT_INVENTORY:        'edit_inventory',
-  EDIT_NOTES:            'edit_notes',
-  EDIT_LOCATION:          'edit_location',
-  CANCEL_EDIT:           'cancel_edit',
 };
 
 const ACTIONS_REGEX = {
-  OPEN:          /^open_(\d+)$/,
-  HISTORY:       /^history_(\d+)$/,
-  GIVE:          /^give_(\d+)$/,
-  RETURN:        /^return_(\d+)$/,
-  REPAIR:        /^repair_(\d+)$/,
-  FROM_REPAIR:   /^fromRepair_(\d+)$/,
-  WRITEOFF:      /^writeoff_(\d+)$/,
-  EDIT:          /^edit_(\d+)$/,
-  DELETE:        /^delete_(\d+)$/,
-  CONFIRM_DELETE:/^confirmDelete_(\d+)$/,
+  OPEN: /^open_(\d+)$/,
+  HISTORY: /^history_(\d+)$/,
+  GIVE: /^give_(\d+)$/,
+  SELECT_GIVE_DURATION: /^selectGiveDuration_(\d+)_(\d+)$/,
+  APPLY_GIVE_PRESET: /^applyGivePreset_(\d+)_(minimal|full|clear)$/,
+  TOGGLE_GIVE_COMPONENT: /^toggleGiveComponent_(\d+)_(.+)$/,
+  INCREMENT_GIVE_COMPONENT: /^incrementGiveComponent_(\d+)_(.+)$/,
+  DECREMENT_GIVE_COMPONENT: /^decrementGiveComponent_(\d+)_(.+)$/,
+  CLEAR_GIVE_COMPONENTS: /^clearGiveComponents_(\d+)$/,
+  FINISH_GIVE_COMPONENTS: /^finishGiveComponents_(\d+)$/,
+  BACK_TO_GIVE_COMPONENTS: /^backToGiveComponents_(\d+)$/,
+  CONFIRM_GIVE: /^confirmGive_(\d+)$/,
+  ADD_MORE_GIVE_CART: /^addMoreGiveCart$/,
+  CONFIRM_GIVE_CART: /^confirmGiveCart$/,
+  CLEAR_GIVE_CART: /^clearGiveCart$/,
+  REMOVE_FROM_GIVE_CART: /^removeFromGiveCart_(\d+)$/,
+  RETURN: /^return_(\d+)$/,
+  RETURN_ALL_MY: /^returnAllMy$/,
+  EXTEND: /^extend_(\d+)$/,
+  EXTEND_ALL_MY: /^extendAllMy$/,
+  REPAIR: /^repair_(\d+)$/,
+  FROM_REPAIR: /^fromRepair_(\d+)$/,
+  WRITEOFF: /^writeoff_(\d+)$/,
+  EDIT: /^edit_(\d+)$/,
+  DELETE: /^delete_(\d+)$/,
+  CONFIRM_DELETE: /^confirmDelete_(\d+)$/,
 };
 
 module.exports = { ACTIONS, ACTIONS_REGEX };

@@ -19,11 +19,19 @@ function startNotificationWorker(bot) {
   const worker = new Worker(
     'notifications',
     async (job) => {
-      const { recipients, message } = job.data;
+      const { recipients, message, replyMarkup } = job.data;
+
+      logger.info(
+        { jobId: job.id, jobName: job.name, recipientCount: recipients.length },
+        'Processing notification job',
+      );
 
       for (const recipientId of recipients) {
         try {
-          await bot.telegram.sendMessage(recipientId, message, { parse_mode: 'HTML' });
+          await bot.telegram.sendMessage(recipientId, message, {
+            parse_mode: 'HTML',
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+          });
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
           // Log per-recipient failures but continue to next recipient
@@ -45,11 +53,19 @@ function startNotificationWorker(bot) {
   });
 
   worker.on('failed', (job, err) => {
-    logger.error({ jobId: job?.id, err: err.message }, 'Notification job failed');
+    logger.error({ jobId: job?.id, jobName: job?.name, err: err.message }, 'Notification job failed');
   });
 
   worker.on('error', (err) => {
     logger.error({ err: err.message }, 'Notification worker error');
+  });
+
+  worker.on('stalled', (job) => {
+    logger.warn({ jobId: job.id, jobName: job.name }, 'Notification job stalled');
+  });
+
+  worker.on('active', (job) => {
+    logger.debug({ jobId: job.id, jobName: job.name }, 'Notification job started');
   });
 
   logger.info('Notification worker started');

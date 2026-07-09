@@ -1,4 +1,4 @@
-# Equipment Bot
+﻿# Equipment Bot
 
 Telegram-бот для учёта оборудования на базе Node.js, PostgreSQL и Redis.
 
@@ -437,3 +437,4 @@ docker compose logs postgres
 ```bash
 docker compose logs -f app | npx pino-pretty
 ```
+
