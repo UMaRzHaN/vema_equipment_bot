@@ -100,6 +100,7 @@ describe('runOverdueCheck', () => {
     assert.ok(admin100Job);
     assert.equal(admin100Job.data.recipients.length, 1);
     assert.match(admin100Job.data.message, /Worker User/);
+    assert.match(admin100Job.data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
     assert.doesNotMatch(admin100Job.data.message, /Admin Self/);
     assert.doesNotMatch(admin100Job.data.message, /tg:\/\/user\?id=100/);
 
@@ -107,9 +108,12 @@ describe('runOverdueCheck', () => {
     assert.ok(admin999Job);
     assert.match(admin999Job.data.message, /Admin Self/);
     assert.match(admin999Job.data.message, /Worker User/);
+    assert.match(admin999Job.data.message, /<a href="tg:\/\/user\?id=100">Admin Self<\/a>/);
+    assert.match(admin999Job.data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
 
     const userJobs = state.adds.filter((job) => job.name === 'sendOverdueUser');
     assert.equal(userJobs.length, 1);
     assert.deepEqual(userJobs[0].data.recipients, [200]);
+    assert.match(userJobs[0].data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
   });
 });

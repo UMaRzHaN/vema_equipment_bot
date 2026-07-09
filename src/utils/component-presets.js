@@ -135,6 +135,7 @@ const SAMPLER_PRESET = preset({
 const CATEGORY_PRESETS = {
   camera: CAMERA_PRESET,
   laptop: LAPTOP_PRESET,
+  sampler: SAMPLER_PRESET,
   generic: GENERIC_PRESET,
 };
 
@@ -145,6 +146,14 @@ const MODEL_PRESETS = {
 function detectCategoryKey(item) {
   const haystack =
     `${item.category || ""} ${item.model || ""} ${item.brand || ""}`.toLowerCase();
+
+  if (
+    haystack.includes("sampler")
+    || haystack.includes("ogi")
+    || haystack.includes("пробоотбор")
+  ) {
+    return "sampler";
+  }
   if (haystack.includes("камер") || haystack.includes("camera")) {
     return "camera";
   }
@@ -186,7 +195,7 @@ function getModelPreset(modelKey) {
 
 function getGiveComponentsPreset(item) {
   const categoryKey = detectCategoryKey(item);
-  const modelKey = normalizeKey(`${item.brand || ""} ${item.model || ""}`);
+  const modelKey = normalizeKey(`${item.category || ""} ${item.brand || ""} ${item.model || ""}`);
 
   const basePreset = CATEGORY_PRESETS[categoryKey] || CATEGORY_PRESETS.generic;
   const modelPreset = getModelPreset(modelKey);

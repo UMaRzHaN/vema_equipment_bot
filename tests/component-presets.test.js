@@ -20,4 +20,16 @@ describe('getGiveComponentsPreset', () => {
     assert.match(preset.single.join(' | '), /Конус/);
     assert.equal(preset.defaultQtyByName['Розовый мешок'], 1);
   });
+
+  it('applies sampler preset by category name', () => {
+    const preset = getGiveComponentsPreset({
+      category: 'Sampler',
+      brand: 'Vema',
+      model: 'X1',
+    });
+
+    assert.deepEqual(preset.quantity, ['Розовый мешок']);
+    assert.match(preset.single.join(' | '), /Воронка/);
+    assert.match(preset.single.join(' | '), /Конус/);
+  });
 });
