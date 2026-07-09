@@ -16,6 +16,7 @@ RUN npm ci --omit=dev
 # ---- release ----
 FROM base AS release
 COPY --from=deps /app/node_modules ./node_modules
+RUN find /app -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} +
 COPY . .
 
 RUN mkdir -p /app/logs
