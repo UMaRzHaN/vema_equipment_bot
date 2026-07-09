@@ -71,7 +71,14 @@ function findSystemFontPath() {
     '/usr/share/fonts/TTF/DejaVuSans.ttf',
   );
 
-  return candidates.find((filePath) => fs.existsSync(filePath));
+  return candidates.find((filePath) => {
+    try {
+      const stats = fs.statSync(filePath);
+      return stats.isFile() && stats.size > 0;
+    } catch {
+      return false;
+    }
+  });
 }
 
 let reportFontPromise = null;
