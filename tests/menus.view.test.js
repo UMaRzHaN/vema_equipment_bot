@@ -4,6 +4,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  buildBrandListKeyboard,
   buildCategoryItemsKeyboard,
   buildMyEquipmentSelectionKeyboard,
 } = require('../src/bot/views/menus');
@@ -44,6 +45,17 @@ describe('buildCategoryItemsKeyboard', () => {
     const inline = markup.reply_markup.inline_keyboard;
     const backButton = inline[inline.length - 1][0];
 
-    assert.equal(backButton.callback_data, `back_brandlist_${encodeURIComponent('Камера')}`);
+    assert.equal(backButton.callback_data, 'back_brandlist');
+  });
+});
+
+describe('buildBrandListKeyboard', () => {
+  it('keeps callbacks short for long category names', () => {
+    const markup = buildBrandListKeyboard('Камера (OGI)', ['Очень длинный бренд оборудования'], 0, 1, 0);
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.equal(inline[0][0].callback_data, 'brandSelect_all');
+    assert.equal(inline[1][0].callback_data, 'brandSelect_0');
+    assert.ok(Buffer.byteLength(inline[1][0].callback_data, 'utf8') <= 64);
   });
 });

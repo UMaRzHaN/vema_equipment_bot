@@ -89,18 +89,21 @@ function buildCategoryListKeyboard(categories, page, totalPages) {
   return Markup.keyboard(keyboard).resize();
 }
 
-function buildBrandListKeyboard(categoryName, brands, page, totalPages) {
-  const encodedCategory = encodeURIComponent(categoryName);
+function buildBrandListKeyboard(categoryName, brands, page, totalPages, pageOffset = 0) {
+  void categoryName;
+
   const rows = [
-    [Markup.button.callback(LABELS.allBrands, `brandSelect_${encodedCategory}__`)],
-    ...brands.map((name) => [Markup.button.callback(name, `brandSelect_${encodedCategory}__${encodeURIComponent(name)}`)]),
+    [Markup.button.callback(LABELS.allBrands, 'brandSelect_all')],
+    ...brands.map((name, index) => [
+      Markup.button.callback(name, `brandSelect_${pageOffset + index}`),
+    ]),
   ];
 
   if (totalPages > 1) {
     const nav = [];
-    if (page > 0) nav.push(Markup.button.callback('⬅️', `brandPage_${encodedCategory}__${page - 1}`));
+    if (page > 0) nav.push(Markup.button.callback('⬅️', `brandPage_${page - 1}`));
     nav.push(Markup.button.callback(`${page + 1}/${totalPages}`, 'noop'));
-    if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `brandPage_${encodedCategory}__${page + 1}`));
+    if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `brandPage_${page + 1}`));
     rows.push(nav);
   }
 
@@ -112,8 +115,6 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
   const start = safePage * ITEMS_PER_PAGE;
   const pageItems = items.slice(start, start + ITEMS_PER_PAGE);
-  const encodedCategory = encodeURIComponent(options.category || items[0]?.category || '');
-  const encodedBrand = encodeURIComponent(options.brand || '');
   const showBrand = !options.brand;
 
   const rows = pageItems.map((item) => {
@@ -128,13 +129,13 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
 
   if (totalPages > 1) {
     const nav = [];
-    if (safePage > 0) nav.push(Markup.button.callback('⬅️', `itemsPage_${encodedCategory}__${encodedBrand}__${safePage - 1}`));
+    if (safePage > 0) nav.push(Markup.button.callback('⬅️', `itemsPage_${safePage - 1}`));
     nav.push(Markup.button.callback(`${safePage + 1}/${totalPages}`, 'noop'));
-    if (safePage < totalPages - 1) nav.push(Markup.button.callback('➡️', `itemsPage_${encodedCategory}__${encodedBrand}__${safePage + 1}`));
+    if (safePage < totalPages - 1) nav.push(Markup.button.callback('➡️', `itemsPage_${safePage + 1}`));
     rows.push(nav);
   }
 
-  rows.push([Markup.button.callback('↩️ Назад', `back_brandlist_${encodedCategory}`)]);
+  rows.push([Markup.button.callback('↩️ Назад', 'back_brandlist')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -168,12 +169,10 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
   }
 
   const selectedMap = new Map(selectedComponents.map((item) => [item.name, item.qty]));
-  const rows = [
-    [
-      Markup.button.callback('Минимум', `applyGivePreset_${equipmentId}_minimal`),
-      Markup.button.callback('Полный комплект', `applyGivePreset_${equipmentId}_full`),
-    ],
-  ];
+  const rows = [[
+    Markup.button.callback('Минимум', `applyGivePreset_${equipmentId}_minimal`),
+    Markup.button.callback('Полный комплект', `applyGivePreset_${equipmentId}_full`),
+  ]];
 
   for (const name of orderedNames) {
     const qty = selectedMap.get(name) || 0;
@@ -247,15 +246,11 @@ function buildMyEquipmentSelectionKeyboard(items, mode, selectedIds = []) {
 
   rows.push([
     Markup.button.callback(
-      mode === 'extend'
-        ? '⏳ Продлить выбранное'
-        : '↩️ Вернуть выбранное',
+      mode === 'extend' ? '⏳ Продлить выбранное' : '↩️ Вернуть выбранное',
       `confirmMyEquipmentSelection_${mode}`,
     ),
   ]);
-  rows.push([
-    Markup.button.callback('❌ Отмена', 'cancelMyEquipmentSelection'),
-  ]);
+  rows.push([Markup.button.callback('❌ Отмена', 'cancelMyEquipmentSelection')]);
 
   return Markup.inlineKeyboard(rows);
 }

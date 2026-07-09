@@ -91,9 +91,10 @@ async function renderBrandMenu(ctx, categoryName, page = 0, editMessage = false)
   ctx.session.selectedCategory = categoryName;
   ctx.session.selectedBrand = null;
   ctx.session.brandPage = safePage;
+  ctx.session.brandList = brands;
 
   const text = `Выберите бренд для категории "${categoryName}" или нажмите "${LABELS.allBrands}"`;
-  const markup = buildBrandListKeyboard(categoryName, items, safePage, totalPages);
+  const markup = buildBrandListKeyboard(categoryName, items, safePage, totalPages, safePage * 4);
   if (editMessage) return ctx.editMessageText(text, markup);
   return ctx.reply(text, markup);
 }
@@ -115,6 +116,10 @@ async function renderEquipmentList(ctx, categoryName, brandName, page = 0, editM
   }
 
   const markup = buildCategoryItemsKeyboard(items, page, { category: categoryName, brand: brandName || '' });
+  ensureSession(ctx);
+  ctx.session.selectedCategory = categoryName;
+  ctx.session.selectedBrand = brandName || null;
+  ctx.session.itemsPage = page;
   if (editMessage) return ctx.editMessageText(title, markup);
   return ctx.reply(title, markup);
 }
@@ -230,38 +235,40 @@ function registerNavigationHandlers(bot) {
     return renderCategoryMenu(ctx, page);
   }, 'back_categories'));
 
-  bot.action(/back_brandlist_(.+)/, safe(async (ctx) => {
+  bot.action(/^back_brandlist$/, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     await ctx.answerCbQuery();
 
-    let categoryName;
-    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
-
     ensureSession(ctx);
+    const categoryName = ctx.session.selectedCategory;
+    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
     ctx.session.selectedCategory = categoryName;
     ctx.session.selectedBrand = null;
     return renderBrandMenu(ctx, categoryName, ctx.session.brandPage || 0, true);
   }, 'back_brandlist'));
 
-  bot.action(/brandPage_(.+?)__(\d+)/, safe(async (ctx) => {
+  bot.action(/^brandPage_(\d+)$/, safe(async (ctx) => {
     await ctx.answerCbQuery();
-    let categoryName;
-    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
-    const page = Number(ctx.match[2]) || 0;
+    ensureSession(ctx);
+    const categoryName = ctx.session.selectedCategory;
+    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    const page = Number(ctx.match[1]) || 0;
     return renderBrandMenu(ctx, categoryName, page, true);
   }, 'brandPage'));
 
-  bot.action(/brandSelect_(.+?)__(.*)/, safe(async (ctx) => {
+  bot.action(/^brandSelect_(all|\d+)$/, safe(async (ctx) => {
     await ctx.answerCbQuery();
-    let categoryName;
-    let brandName;
-    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
-    try { brandName = decodeURIComponent(ctx.match[2]); } catch { brandName = ctx.match[2]; }
 
     ensureSession(ctx);
+    const categoryName = ctx.session.selectedCategory;
+    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    const token = ctx.match[1];
+    const brandName = token === 'all'
+      ? null
+      : ctx.session.brandList?.[Number(token)] || null;
     ctx.session.selectedCategory = categoryName;
-    ctx.session.selectedBrand = brandName || null;
-    return renderEquipmentList(ctx, categoryName, brandName || null, 0, true);
+    ctx.session.selectedBrand = brandName;
+    return renderEquipmentList(ctx, categoryName, brandName, 0, true);
   }, 'brandSelect'));
 
   bot.action(/excelCategory_(.+)/, safe(async (ctx) => {
@@ -276,16 +283,14 @@ function registerNavigationHandlers(bot) {
     return ctx.replyWithDocument({ source: buffer, filename: `category-${safeName}.xlsx` });
   }, 'excelCategory'));
 
-  bot.action(/itemsPage_(.+?)__(.*?)__(\d+)/, safe(async (ctx) => {
+  bot.action(/^itemsPage_(\d+)$/, safe(async (ctx) => {
     await ctx.answerCbQuery();
-
-    let categoryName;
-    let brandName;
-    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
-    try { brandName = decodeURIComponent(ctx.match[2]); } catch { brandName = ctx.match[2]; }
-
-    const page = Number(ctx.match[3]) || 0;
-    return renderEquipmentList(ctx, categoryName, brandName || null, page, true);
+    ensureSession(ctx);
+    const categoryName = ctx.session.selectedCategory;
+    const brandName = ctx.session.selectedBrand || null;
+    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    const page = Number(ctx.match[1]) || 0;
+    return renderEquipmentList(ctx, categoryName, brandName, page, true);
   }, 'itemsPage'));
 
   bot.action('noop', (ctx) => ctx.answerCbQuery());
