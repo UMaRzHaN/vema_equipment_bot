@@ -59,8 +59,16 @@ const MIGRATIONS = [
         };
 
         const VALID_FLOW_TYPES = new Set([
-          'add_equipment', 'edit_equipment', 'repair', 'writeoff',
-          'register_profile', 'edit_profile', 'assign_role',
+          'add_equipment',
+          'edit_equipment',
+          'give_duration',
+          'give_components',
+          'repair',
+          'writeoff',
+          'register_profile',
+          'edit_profile',
+          'assign_role',
+          'return_location',
         ]);
 
         if (migrated.flow.type && !VALID_FLOW_TYPES.has(migrated.flow.type)) {
