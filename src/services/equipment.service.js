@@ -127,6 +127,7 @@ async function giveEquipmentToUser(equipment, userId, components = [], expectedR
         current_holder_user_id: userId,
         current_issue_date: new Date().toISOString(),
         expected_return_date: expectedReturnDate,
+        warehouse: null,
         components,
       },
       {
@@ -219,6 +220,7 @@ async function startRepair(equipment, performedByUserId, comment) {
         current_holder_user_id: null,
         current_issue_date: null,
         expected_return_date: null,
+        warehouse: null,
       },
       {
         equipment_id: equipment.id,
@@ -245,6 +247,7 @@ async function completeRepair(equipment, performedByUserId) {
         current_holder_user_id: null,
         current_issue_date: null,
         expected_return_date: null,
+        warehouse: equipment.warehouse || 'Ташкент',
       },
       {
         equipment_id: equipment.id,
@@ -269,6 +272,7 @@ async function writeOffEquipment(equipment, performedByUserId, comment) {
         current_holder_user_id: null,
         current_issue_date: null,
         expected_return_date: null,
+        warehouse: null,
       },
       {
         equipment_id: equipment.id,

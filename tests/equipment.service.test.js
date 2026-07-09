@@ -48,6 +48,7 @@ describe('giveEquipmentToUser', () => {
     const [equipUpdate] = state.atomicCalls[0];
     assert.equal(equipUpdate.status, 'у пользователя');
     assert.equal(equipUpdate.current_holder_user_id, 42);
+    assert.equal(equipUpdate.warehouse, null);
   });
 
   it('returns refreshed item from findEquipmentById', async () => {
@@ -69,6 +70,28 @@ describe('returnEquipmentFromUser', () => {
     const [equipUpdate] = state.atomicCalls[0];
     assert.equal(equipUpdate.status, 'на складе');
     assert.equal(equipUpdate.current_holder_user_id, null);
+  });
+});
+
+// ── repair / write-off transitions ───────────────────────────────────────────
+describe('non-stock status transitions', () => {
+  beforeEach(() => {
+    state.atomicCalls = [];
+    state.findResult = { id: 3, status: 'в ремонте', current_holder_user_id: null };
+  });
+
+  it('clears warehouse when sending equipment to repair', async () => {
+    await service.startRepair({ id: 3, status: 'на складе' }, 42, null);
+    const [equipUpdate] = state.atomicCalls[0];
+    assert.equal(equipUpdate.status, 'в ремонте');
+    assert.equal(equipUpdate.warehouse, null);
+  });
+
+  it('clears warehouse when writing equipment off', async () => {
+    await service.writeOffEquipment({ id: 3, status: 'на складе' }, 42, null);
+    const [equipUpdate] = state.atomicCalls[0];
+    assert.equal(equipUpdate.status, 'списано');
+    assert.equal(equipUpdate.warehouse, null);
   });
 });
 
