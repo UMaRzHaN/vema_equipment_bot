@@ -12,6 +12,8 @@ const { formatComponent, normalizeComponents } = require("../utils/components");
 
 const notificationQueue = new Queue("notifications", { connection: bullRedis });
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const OVERDUE_LOCK_KEY = "notifications:overdue-check:lock";
+const OVERDUE_LOCK_TTL_MS = 10 * 60 * 1000;
 
 function buildUserOverdueReplyMarkup() {
   return Markup.inlineKeyboard([
@@ -26,7 +28,29 @@ function buildUserLink(userId, usersMap) {
   const normalizedUserId = String(userId);
   const user = usersMap.get(normalizedUserId) || usersMap.get(Number(userId));
   const label = escapeHtml(formatUser(user) || String(userId));
+  if (user?.username) {
+    return `<a href="https://t.me/${encodeURIComponent(user.username)}">${label}</a>`;
+  }
   return `<a href="tg://user?id=${Number(userId)}">${label}</a>`;
+}
+
+async function acquireOverdueCheckLock() {
+  const lockValue = `${process.pid}:${Date.now()}`;
+  const acquired = await bullRedis.set(
+    OVERDUE_LOCK_KEY,
+    lockValue,
+    "PX",
+    OVERDUE_LOCK_TTL_MS,
+    "NX",
+  );
+  return acquired === "OK" ? lockValue : null;
+}
+
+async function releaseOverdueCheckLock(lockValue) {
+  const currentValue = await bullRedis.get(OVERDUE_LOCK_KEY);
+  if (currentValue === lockValue) {
+    await bullRedis.del(OVERDUE_LOCK_KEY);
+  }
 }
 
 function formatComponentsText(components) {
@@ -113,6 +137,12 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
   if (!envAdminIds || envAdminIds.length === 0) {
     logger.warn("Notification scheduler: no ADMIN_IDS, skipping");
     return { sent: false, count: 0 };
+  }
+
+  const lockValue = await acquireOverdueCheckLock();
+  if (!lockValue) {
+    logger.warn("Overdue check skipped: another instance is already running");
+    return { sent: false, count: 0, skipped: true };
   }
 
   try {
@@ -213,6 +243,8 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
   } catch (err) {
     logger.error({ err: err.message }, "Overdue check failed");
     throw err;
+  } finally {
+    await releaseOverdueCheckLock(lockValue);
   }
 }
 

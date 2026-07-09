@@ -9,6 +9,7 @@ const state = {
   overdueItems: [],
   admins: [],
   usersMap: new Map(),
+  redisStore: new Map(),
 };
 
 class QueueStub {
@@ -32,7 +33,22 @@ const service = proxyquire('../src/services/notification.service', {
       },
     },
   },
-  '../redis': { bullRedis: {} },
+  '../redis': {
+    bullRedis: {
+      async set(key, value, mode, ttl, condition) {
+        if (mode !== 'PX' || condition !== 'NX') throw new Error('Unexpected lock options');
+        if (state.redisStore.has(key)) return null;
+        state.redisStore.set(key, value);
+        return 'OK';
+      },
+      async get(key) {
+        return state.redisStore.get(key) || null;
+      },
+      async del(key) {
+        state.redisStore.delete(key);
+      },
+    },
+  },
   './history.service': {
     findOverdueEquipment: async () => state.overdueItems,
   },
@@ -62,6 +78,7 @@ describe('runOverdueCheck', () => {
   beforeEach(() => {
     state.adds = [];
     state.admins = [{ telegram_user_id: 100 }, { telegram_user_id: 999 }];
+    state.redisStore = new Map();
     state.overdueItems = [
       {
         id: 1,
@@ -84,7 +101,7 @@ describe('runOverdueCheck', () => {
     ];
     state.usersMap = new Map([
       ['100', { telegram_user_id: 100, name: 'Admin Self' }],
-      ['200', { telegram_user_id: 200, name: 'Worker User' }],
+      ['200', { telegram_user_id: 200, name: 'Worker User', username: 'worker.user' }],
     ]);
   });
 
@@ -100,7 +117,7 @@ describe('runOverdueCheck', () => {
     assert.ok(admin100Job);
     assert.equal(admin100Job.data.recipients.length, 1);
     assert.match(admin100Job.data.message, /Worker User/);
-    assert.match(admin100Job.data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
+    assert.match(admin100Job.data.message, /<a href="https:\/\/t\.me\/worker\.user">Worker User<\/a>/);
     assert.doesNotMatch(admin100Job.data.message, /Admin Self/);
     assert.doesNotMatch(admin100Job.data.message, /tg:\/\/user\?id=100/);
 
@@ -109,11 +126,20 @@ describe('runOverdueCheck', () => {
     assert.match(admin999Job.data.message, /Admin Self/);
     assert.match(admin999Job.data.message, /Worker User/);
     assert.match(admin999Job.data.message, /<a href="tg:\/\/user\?id=100">Admin Self<\/a>/);
-    assert.match(admin999Job.data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
+    assert.match(admin999Job.data.message, /<a href="https:\/\/t\.me\/worker\.user">Worker User<\/a>/);
 
     const userJobs = state.adds.filter((job) => job.name === 'sendOverdueUser');
     assert.equal(userJobs.length, 1);
     assert.deepEqual(userJobs[0].data.recipients, [200]);
-    assert.match(userJobs[0].data.message, /<a href="tg:\/\/user\?id=200">Worker User<\/a>/);
+    assert.match(userJobs[0].data.message, /<a href="https:\/\/t\.me\/worker\.user">Worker User<\/a>/);
+  });
+
+  it('skips duplicate overdue check while lock is held', async () => {
+    state.redisStore.set('notifications:overdue-check:lock', 'busy');
+
+    const result = await service.runOverdueCheck([100], 7);
+
+    assert.deepEqual(result, { sent: false, count: 0, skipped: true });
+    assert.equal(state.adds.length, 0);
   });
 });
