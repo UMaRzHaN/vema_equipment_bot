@@ -359,9 +359,9 @@ function registerNavigationHandlers(bot) {
     if (ctx.session.mode === 'summary') {
       const items = await listEquipmentByCategory(text);
       const loading = await ctx.reply('Генерируется изображение, подождите...');
+      const safeName = text.replace(/[\\/:*?"<>|]/g, '_');
       try {
         const buf = await createCategoryImage(items);
-        const safeName = text.replace(/[\\/:*?"<>|]/g, '_');
         const response = await ctx.replyWithPhoto(
           { source: buf, filename: `category-${safeName}.png` },
           { caption: `📦 ${text}`, parse_mode: 'HTML', ...buildCategoryExportKeyboard(text) },
@@ -370,8 +370,19 @@ function registerNavigationHandlers(bot) {
         return response;
       } catch (err) {
         logger.error({ err: err.message }, 'Image generation error');
-        await ctx.deleteMessage(loading.message_id).catch(() => {});
-        return ctx.reply('Ошибка при создании изображения.');
+        try {
+          const buffer = await buildCategoryXlsx(text, items);
+          await ctx.deleteMessage(loading.message_id).catch(() => {});
+          await ctx.reply('Не удалось собрать PNG-изображение. Отправляю Excel-файл этой категории.');
+          return ctx.replyWithDocument(
+            { source: buffer, filename: `category-${safeName}.xlsx` },
+            { caption: `📦 ${text}` },
+          );
+        } catch (fallbackErr) {
+          logger.error({ err: fallbackErr.message }, 'Category export fallback error');
+          await ctx.deleteMessage(loading.message_id).catch(() => {});
+          return ctx.reply('Ошибка при создании изображения и резервного файла Excel.');
+        }
       }
     }
 

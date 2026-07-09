@@ -18,6 +18,7 @@ FROM base AS release
 COPY --from=deps /app/node_modules ./node_modules
 RUN find /app -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} +
 COPY . .
+RUN node scripts/setup-fonts.js || true
 
 RUN mkdir -p /app/logs
 
