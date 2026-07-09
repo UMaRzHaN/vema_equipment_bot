@@ -115,7 +115,7 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
   const start = safePage * ITEMS_PER_PAGE;
   const pageItems = items.slice(start, start + ITEMS_PER_PAGE);
-  const showBrand = !options.brand;
+  const showBrand = Boolean(options.showBrand);
 
   const rows = pageItems.map((item) => {
     const brandPrefix = showBrand && item.brand ? `${item.brand} • ` : '';

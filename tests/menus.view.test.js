@@ -47,6 +47,16 @@ describe('buildCategoryItemsKeyboard', () => {
 
     assert.equal(backButton.callback_data, 'back_brandlist');
   });
+  it('does not show brand in item text for all-brands mode', () => {
+    const markup = buildCategoryItemsKeyboard(
+      [{ id: 8, position: 1, brand: 'AddGlobe LLC', model: 'GFM 2.0', serial_number: 'SN-8' }],
+      0,
+      { category: 'Sampler', showBrand: false },
+    );
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.equal(inline[0][0].text, '1. GFM 2.0 - SN-8');
+  });
 });
 
 describe('buildBrandListKeyboard', () => {

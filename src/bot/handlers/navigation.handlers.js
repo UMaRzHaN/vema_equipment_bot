@@ -115,7 +115,11 @@ async function renderEquipmentList(ctx, categoryName, brandName, page = 0, editM
     return ctx.reply(emptyText);
   }
 
-  const markup = buildCategoryItemsKeyboard(items, page, { category: categoryName, brand: brandName || '' });
+  const markup = buildCategoryItemsKeyboard(items, page, {
+    category: categoryName,
+    brand: brandName || '',
+    showBrand: false,
+  });
   ensureSession(ctx);
   ctx.session.selectedCategory = categoryName;
   ctx.session.selectedBrand = brandName || null;
