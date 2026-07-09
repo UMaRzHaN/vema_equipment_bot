@@ -117,11 +117,12 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
   const pageItems = items.slice(start, start + ITEMS_PER_PAGE);
   const showBrand = Boolean(options.showBrand);
 
-  const rows = pageItems.map((item) => {
+  const rows = pageItems.map((item, index) => {
     const brandPrefix = showBrand && item.brand ? `${item.brand} • ` : '';
+    const displayIndex = start + index + 1;
     return [
       Markup.button.callback(
-        `${item.position || item.id}. ${brandPrefix}${item.model || '-'} - ${item.serial_number || '-'}`,
+        `${displayIndex}. ${brandPrefix}${item.model || '-'} - ${item.serial_number || '-'}`,
         `open_${item.id}`,
       ),
     ];

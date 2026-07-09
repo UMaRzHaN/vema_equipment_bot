@@ -14,6 +14,7 @@ const notificationQueue = new Queue("notifications", { connection: bullRedis });
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const OVERDUE_LOCK_KEY = "notifications:overdue-check:lock";
 const OVERDUE_LOCK_TTL_MS = 10 * 60 * 1000;
+const OVERDUE_JOB_TTL_SECONDS = 15 * 60;
 
 function buildUserOverdueReplyMarkup() {
   return Markup.inlineKeyboard([
@@ -51,6 +52,21 @@ async function releaseOverdueCheckLock(lockValue) {
   if (currentValue === lockValue) {
     await bullRedis.del(OVERDUE_LOCK_KEY);
   }
+}
+
+function buildNotificationJobOptions(jobId) {
+  return {
+    jobId,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+function buildOverdueJobId(kind, recipientId) {
+  const windowKey = Math.floor(Date.now() / (OVERDUE_JOB_TTL_SECONDS * 1000));
+  return `${kind}:${recipientId}:${windowKey}`;
 }
 
 function formatComponentsText(components) {
@@ -127,7 +143,7 @@ async function enqueueOverdueNotificationForUser(userId, overdueDays = 7) {
       message: userMessage,
       replyMarkup: buildUserOverdueReplyMarkup(),
     },
-    { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+    buildNotificationJobOptions(buildOverdueJobId("sendOverdueUser", targetUserId)),
   );
 
   return { sent: true, count: userItems.length, userId: targetUserId };
@@ -194,7 +210,7 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
       const adminJob = await notificationQueue.add(
         "sendOverdueAdmins",
         { recipients: [adminId], message: adminMessage },
-        { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+        buildNotificationJobOptions(buildOverdueJobId("sendOverdueAdmins", adminId)),
       );
       logger.info(
         { jobId: adminJob.id, jobName: adminJob.name, recipient: adminId },
@@ -231,7 +247,7 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
           message: userMessage,
           replyMarkup: buildUserOverdueReplyMarkup(),
         },
-        { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+        buildNotificationJobOptions(buildOverdueJobId("sendOverdueUser", Number(userId))),
       );
       logger.info(
         { jobId: userJob.id, userId, itemCount: userItems.length },

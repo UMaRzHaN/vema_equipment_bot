@@ -57,6 +57,21 @@ describe('buildCategoryItemsKeyboard', () => {
 
     assert.equal(inline[0][0].text, '1. GFM 2.0 - SN-8');
   });
+
+  it('uses list order instead of database id for item numbering', () => {
+    const markup = buildCategoryItemsKeyboard(
+      [
+        { id: 10, model: 'Mileva 33', serial_number: 'SER-10' },
+        { id: 11, model: 'Mileva 33', serial_number: 'SER-11' },
+      ],
+      0,
+      { category: 'Камера (OGI)', showBrand: false },
+    );
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.equal(inline[0][0].text, '1. Mileva 33 - SER-10');
+    assert.equal(inline[1][0].text, '2. Mileva 33 - SER-11');
+  });
 });
 
 describe('buildBrandListKeyboard', () => {

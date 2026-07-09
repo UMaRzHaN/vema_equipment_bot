@@ -35,6 +35,7 @@ function startNotificationWorker(bot) {
         try {
           await bot.telegram.sendMessage(recipientId, message, {
             parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           });
           notificationsTotal.inc({ status: 'sent' });

@@ -144,20 +144,20 @@ const MODEL_PRESETS = {
 };
 
 function detectCategoryKey(item) {
-  const haystack =
-    `${item.category || ""} ${item.model || ""} ${item.brand || ""}`.toLowerCase();
+  const category = normalizeKey(item.category || "");
+  const model = normalizeKey(item.model || "");
 
   if (
-    haystack.includes("sampler")
-    || haystack.includes("ogi")
-    || haystack.includes("пробоотбор")
+    category.includes("sampler")
+    || category.includes("пробоотбор")
+    || model.includes("sampler")
   ) {
     return "sampler";
   }
-  if (haystack.includes("камер") || haystack.includes("camera")) {
+  if (category.includes("камер") || category.includes("camera")) {
     return "camera";
   }
-  if (haystack.includes("ноут") || haystack.includes("laptop")) {
+  if (category.includes("ноут") || category.includes("laptop")) {
     return "laptop";
   }
   return "generic";

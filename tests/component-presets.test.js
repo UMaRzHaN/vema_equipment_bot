@@ -32,4 +32,18 @@ describe('getGiveComponentsPreset', () => {
     assert.match(preset.single.join(' | '), /Воронка/);
     assert.match(preset.single.join(' | '), /Конус/);
   });
+
+  it('applies camera preset for camera ogi category', () => {
+    const preset = getGiveComponentsPreset({
+      category: 'Камера (OGI)',
+      brand: 'Mileva',
+      model: 'Gx620',
+    });
+
+    assert.deepEqual(preset.quantity, ['Батарейка']);
+    assert.match(preset.single.join(' | '), /Штатив/);
+    assert.match(preset.single.join(' | '), /Анемометр/);
+    assert.doesNotMatch(preset.single.join(' | '), /Воронка/);
+    assert.doesNotMatch(preset.single.join(' | '), /Конус/);
+  });
 });

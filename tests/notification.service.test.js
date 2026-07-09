@@ -13,8 +13,8 @@ const state = {
 };
 
 class QueueStub {
-  async add(name, data) {
-    state.adds.push({ name, data });
+  async add(name, data, options) {
+    state.adds.push({ name, data, options });
     return { id: state.adds.length, name };
   }
 }
@@ -116,6 +116,7 @@ describe('runOverdueCheck', () => {
     const admin100Job = adminJobs.find((job) => job.data.recipients[0] === 100);
     assert.ok(admin100Job);
     assert.equal(admin100Job.data.recipients.length, 1);
+    assert.match(admin100Job.options.jobId, /^sendOverdueAdmins:100:/);
     assert.match(admin100Job.data.message, /Worker User/);
     assert.match(admin100Job.data.message, /<a href="https:\/\/t\.me\/worker\.user">Worker User<\/a>/);
     assert.doesNotMatch(admin100Job.data.message, /Admin Self/);
@@ -123,6 +124,7 @@ describe('runOverdueCheck', () => {
 
     const admin999Job = adminJobs.find((job) => job.data.recipients[0] === 999);
     assert.ok(admin999Job);
+    assert.match(admin999Job.options.jobId, /^sendOverdueAdmins:999:/);
     assert.match(admin999Job.data.message, /Admin Self/);
     assert.match(admin999Job.data.message, /Worker User/);
     assert.match(admin999Job.data.message, /<a href="tg:\/\/user\?id=100">Admin Self<\/a>/);
@@ -131,6 +133,7 @@ describe('runOverdueCheck', () => {
     const userJobs = state.adds.filter((job) => job.name === 'sendOverdueUser');
     assert.equal(userJobs.length, 1);
     assert.deepEqual(userJobs[0].data.recipients, [200]);
+    assert.match(userJobs[0].options.jobId, /^sendOverdueUser:200:/);
     assert.match(userJobs[0].data.message, /<a href="https:\/\/t\.me\/worker\.user">Worker User<\/a>/);
   });
 

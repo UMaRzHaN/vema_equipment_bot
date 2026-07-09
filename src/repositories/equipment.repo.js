@@ -1,6 +1,7 @@
 'use strict';
 
 const { query, transaction } = require('../db');
+const MAX_HISTORY_ENTRIES = 8;
 
 async function createEquipment(data) {
   const result = await query(
@@ -273,6 +274,19 @@ async function atomicStatusChange(statusData, historyData) {
         historyData.performed_by_user_id ?? null,
         historyData.comment ?? null,
       ],
+    );
+
+    await client.query(
+      `DELETE FROM history
+       WHERE equipment_id = $1
+         AND id IN (
+           SELECT id
+           FROM history
+           WHERE equipment_id = $1
+           ORDER BY action_date DESC, id DESC
+           OFFSET $2
+         )`,
+      [historyData.equipment_id, MAX_HISTORY_ENTRIES],
     );
   });
 }

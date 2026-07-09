@@ -101,14 +101,11 @@ async function sendAddPrompt(ctx, step) {
     }
     case ADD_STEP.SERIAL:
       return ctx.reply(`${stepLabel(step)} Введите серийный номер:`, buildBackKeyboard());
-    case ADD_STEP.PURCHASE_DATE: {
-      const prompt = await getEquipmentSuggestionText(
-        'purchase_date',
+    case ADD_STEP.PURCHASE_DATE:
+      return ctx.reply(
         `${stepLabel(step)} Введите дату покупки (ДД.ММ.ГГГГ) или оставьте пустым:`,
-        category,
+        buildBackKeyboard(),
       );
-      return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
-    }
     default:
       return ctx.reply('Введите значение:', buildBackKeyboard());
   }

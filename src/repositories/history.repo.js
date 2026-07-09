@@ -1,6 +1,22 @@
 'use strict';
 
 const { query } = require('../db');
+const MAX_HISTORY_ENTRIES = 8;
+
+async function trimHistory(client, equipmentId) {
+  await client.query(
+    `DELETE FROM history
+     WHERE equipment_id = $1
+       AND id IN (
+         SELECT id
+         FROM history
+         WHERE equipment_id = $1
+         ORDER BY action_date DESC, id DESC
+         OFFSET $2
+       )`,
+    [equipmentId, MAX_HISTORY_ENTRIES],
+  );
+}
 
 async function addHistory(data) {
   await query(
@@ -19,6 +35,7 @@ async function addHistory(data) {
       data.comment || null,
     ],
   );
+  await trimHistory({ query }, data.equipment_id);
 }
 
 async function getEquipmentHistory(equipmentId, options = 10) {
@@ -28,6 +45,7 @@ async function getEquipmentHistory(equipmentId, options = 10) {
       limit: Number.isInteger(options?.limit) ? options.limit : 10,
       offset: Number.isInteger(options?.offset) ? options.offset : 0,
     };
+  const safeLimit = Math.min(Math.max(limit, 1), MAX_HISTORY_ENTRIES);
   const result = await query(
     `SELECT h.action, h.from_status, h.to_status, h.comment, h.action_date,
             u.first_name, u.last_name, u.username
@@ -37,7 +55,7 @@ async function getEquipmentHistory(equipmentId, options = 10) {
      ORDER BY h.action_date DESC
      LIMIT $2
      OFFSET $3`,
-    [equipmentId, limit, offset],
+    [equipmentId, safeLimit, offset],
   );
   return result.rows;
 }
