@@ -1,8 +1,12 @@
 'use strict';
 
-exports.up = (pgm) => {
-  // First allow NULLs, then clean existing rows, then enforce the new rule.
+exports.up = async (pgm) => {
   pgm.alterColumn('equipment', 'warehouse', { notNull: false, default: null });
+
+  await pgm.db.query(`
+    ALTER TABLE equipment
+    DROP CONSTRAINT IF EXISTS chk_warehouse_only_in_stock
+  `);
 
   pgm.sql(`UPDATE equipment SET warehouse = NULL WHERE status != 'на складе'`);
 
