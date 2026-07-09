@@ -98,7 +98,7 @@ function buildAdminOverdueMessageForRecipient(recipientId, itemsByUser, overdueD
 
   if (!sections) return null;
 
-  return `⚠️ Есть просроченное оборудование.\nПорог для позиций без плановой даты возврата: ${overdueDays} дн.\n\n${sections}`;
+  return `⚠️ Есть просроченное оборудование.\n\n${sections}`;
 }
 
 function buildUserOverdueMessage(userId, items, overdueDays, usersMap) {
@@ -107,7 +107,6 @@ function buildUserOverdueMessage(userId, items, overdueDays, usersMap) {
 
   return [
     `⚠️ ${greeting}, у вас есть просроченное оборудование.`,
-    `Порог для позиций без плановой даты возврата: ${overdueDays} дн.`,
     "",
     lines,
   ].join("\n");
