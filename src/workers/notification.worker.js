@@ -5,6 +5,11 @@ const { bullRedis } = require('../redis');
 const logger = require('../utils/logger');
 const { notificationsTotal } = require('../utils/metrics');
 
+function isChatNotFoundError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  return message.includes('chat not found');
+}
+
 /**
  * Creates and starts the BullMQ notification worker.
  *
@@ -34,8 +39,12 @@ function startNotificationWorker(bot) {
           });
           notificationsTotal.inc({ status: 'sent' });
         } catch (err) {
-          // Log per-recipient failures but continue to next recipient
-          logger.error({ recipientId, err: err.message }, 'Failed to send notification to recipient');
+          // "chat not found" is expected when the holder never started the bot.
+          if (isChatNotFoundError(err)) {
+            logger.warn({ recipientId, err: err.message }, 'Skipping notification: recipient chat not found');
+          } else {
+            logger.error({ recipientId, err: err.message }, 'Failed to send notification to recipient');
+          }
           notificationsTotal.inc({ status: 'failed' });
         }
       }
@@ -72,4 +81,4 @@ function startNotificationWorker(bot) {
   return worker;
 }
 
-module.exports = { startNotificationWorker };
+module.exports = { isChatNotFoundError, startNotificationWorker };

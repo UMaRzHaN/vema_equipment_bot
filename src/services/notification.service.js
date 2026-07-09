@@ -177,6 +177,13 @@ async function runOverdueCheck(envAdminIds, overdueDays) {
 
     for (const [userId, userItems] of Object.entries(itemsByUser)) {
       if (allAdminIds.includes(Number(userId))) continue;
+      if (!usersMap.has(String(userId))) {
+        logger.warn(
+          { userId, itemCount: userItems.length },
+          'Skipping sendOverdueUser job: holder is missing from users table',
+        );
+        continue;
+      }
 
       const userMessage = buildUserOverdueMessage(
         userId,
