@@ -8,7 +8,7 @@ const { getUserByTelegramId } = require('../../services/user.service');
 const ROLE_LABELS = {
   user: '👤 Пользователь',
   manager: '📋 Менеджер',
-  admin: '👑 Администратор',
+  admin: '🫅 Администратор',
 };
 
 async function renderProfileCard(ctx) {

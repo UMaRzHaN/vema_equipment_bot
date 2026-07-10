@@ -21,7 +21,7 @@ describe('buildMyEquipmentSelectionKeyboard', () => {
     const markup = buildMyEquipmentSelectionKeyboard(items, 'extend', [10]);
     const inline = markup.reply_markup.inline_keyboard;
 
-    assert.match(inline[0][0].text, /вњ…/);
+    assert.match(inline[0][0].text, /✅/);
     assert.equal(inline[0][0].callback_data, 'toggleMyEquipmentSelection_extend_10');
     assert.equal(inline[1][0].callback_data, 'toggleMyEquipmentSelection_extend_11');
     assert.equal(inline[2][0].callback_data, 'toggleAllMyEquipmentSelection_extend');
@@ -32,7 +32,7 @@ describe('buildMyEquipmentSelectionKeyboard', () => {
   it('switches confirm caption for return mode', () => {
     const markup = buildMyEquipmentSelectionKeyboard(items, 'return', []);
     const inline = markup.reply_markup.inline_keyboard;
-    assert.match(inline[3][0].text, /Р’РµСЂРЅСѓС‚СЊ/);
+    assert.match(inline[3][0].text, /Вернуть/);
     assert.equal(inline[3][0].callback_data, 'confirmMyEquipmentSelection_return');
   });
 });
