@@ -24,6 +24,7 @@ describe('registerNavigationHandlers', () => {
   it('approves pending registration and notifies the user', async () => {
     const approvalCalls = [];
     const notifications = [];
+    const userMenu = { reply_markup: { keyboard: [['Сводка', 'Профиль']] } };
 
     const { registerNavigationHandlers } = proxyquire('../src/bot/handlers/navigation.handlers', {
       '../labels': { LABELS: {} },
@@ -79,7 +80,7 @@ describe('registerNavigationHandlers', () => {
         buildMyEquipmentKeyboard: () => ({}),
         buildRoleSelectKeyboard: () => ({}),
         buildUserListKeyboard: () => ({}),
-        mainMenu: () => ({}),
+        mainMenu: () => userMenu,
       },
     });
 
@@ -93,14 +94,14 @@ describe('registerNavigationHandlers', () => {
       answerCbQuery: async () => {},
       editMessageText: async (text) => { ctx.edited = text; },
       telegram: {
-        sendMessage: async (chatId, text) => { notifications.push({ chatId, text }); },
+        sendMessage: async (chatId, text, options) => { notifications.push({ chatId, text, options }); },
       },
     };
 
     await entry.handler(ctx);
 
     assert.deepEqual(approvalCalls, [{ userId: 200, approved: true }]);
-    assert.deepEqual(notifications, [{ chatId: 200, text: 'approved' }]);
+    assert.deepEqual(notifications, [{ chatId: 200, text: 'approved', options: { link_preview_options: { is_disabled: true }, ...userMenu } }]);
     assert.match(ctx.edited, /подтверждена/i);
   });
 

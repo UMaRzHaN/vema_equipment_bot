@@ -427,6 +427,10 @@ function registerNavigationHandlers(bot) {
     await setUserApproved(telegramUserId, true);
     await ctx.telegram.sendMessage(telegramUserId, buildRegistrationApprovedMessage(), {
       link_preview_options: { is_disabled: true },
+      ...mainMenu({
+        from: { id: telegramUserId },
+        session: { userRole: user.role || 'user' },
+      }),
     });
     await ctx.answerCbQuery('Регистрация подтверждена.');
 

@@ -164,6 +164,7 @@ describe('extendEquipmentForUser', () => {
     assert.equal(equipUpdate.status, 'у пользователя');
     assert.equal(equipUpdate.expected_return_date, expectedReturnDate);
     assert.deepEqual(equipUpdate.components, [{ name: 'Кабель', qty: 1 }]);
+    assert.equal(equipUpdate.warehouse, null);
     assert.equal(historyEntry.equipment_id, 4);
     assert.equal(historyEntry.action, 'срок продлен');
     assert.equal(historyEntry.from_status, 'у пользователя');

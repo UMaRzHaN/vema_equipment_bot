@@ -179,11 +179,12 @@ async function createCategoryImage(items) {
 
     for (const item of brandItems) {
       const holder = item.current_holder_user_id ? formatUser(usersMap.get(item.current_holder_user_id)) : '-';
+      const warehouse = item.status === STATUS.WITH_USER ? '' : (item.warehouse || DEFAULT_WAREHOUSE);
       const rowValues = [
         String(index),
         `${item.model || '-'} - ${item.serial_number || '-'}`,
         formatComponentsText(item.components),
-        item.warehouse || DEFAULT_WAREHOUSE,
+        warehouse,
         statusLabel(item.status),
         holder,
         formatDate(item.current_issue_date),
@@ -256,6 +257,8 @@ async function buildCategoryXlsx(categoryName, items) {
       const holder = item.current_holder_user_id ? formatUser(usersMap.get(item.current_holder_user_id)) : '';
       const componentsText = formatComponentsText(item.components);
 
+      const warehouse = item.status === STATUS.WITH_USER ? '' : (item.warehouse || DEFAULT_WAREHOUSE);
+
       sheet.addRow({
         position: index,
         category: item.category || '',
@@ -263,7 +266,7 @@ async function buildCategoryXlsx(categoryName, items) {
         model: item.model || '',
         components: componentsText === '-' ? '' : componentsText,
         serial_number: item.serial_number || '',
-        warehouse: item.warehouse || DEFAULT_WAREHOUSE,
+        warehouse,
         purchase_date: formatDateOnly(item.purchase_date),
         status: statusLabel(item.status),
         holder,

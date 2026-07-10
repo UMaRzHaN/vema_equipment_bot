@@ -158,7 +158,7 @@ async function extendEquipmentForUser(equipment, userId, expectedReturnDate) {
         current_issue_date: equipment.current_issue_date,
         expected_return_date: expectedReturnDate,
         components: equipment.components || [],
-        warehouse: equipment.warehouse || null,
+        warehouse: null,
       },
       {
         equipment_id: equipment.id,
