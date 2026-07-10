@@ -326,10 +326,14 @@ function registerNavigationHandlers(bot) {
     const user = await getUserByTelegramId(telegramUserId);
     if (!user) return ctx.answerCbQuery('Пользователь не найден.', { show_alert: true });
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
-    const status = user.is_banned ? 'заблокирован' : 'активен';
+    const status = user.is_banned
+      ? 'заблокирован'
+      : user.is_approved === false
+        ? 'ожидает подтверждения'
+        : 'активен';
     return ctx.editMessageText(
       `👤 ${name}\nТелефон: ${user.phone || '—'}\nТекущая роль: ${user.role || 'user'}\nСтатус: ${status}\n\nВыберите действие:`,
-      buildRoleSelectKeyboard(telegramUserId, { isBanned: Boolean(user.is_banned), page }),
+      buildRoleSelectKeyboard(telegramUserId, { isApproved: Boolean(user.is_approved), isBanned: Boolean(user.is_banned), page }),
     );
   }, 'set_role_select'));
 

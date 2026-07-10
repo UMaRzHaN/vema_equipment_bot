@@ -27,32 +27,39 @@ function buildUserListKeyboard(users, page, totalPages) {
       || user.username
       || `#${user.telegram_user_id}`;
     const roleTag = user.role === 'admin'
-      ? '🛡'
+      ? 'рџ›Ў'
       : user.role === 'manager'
-        ? '📋'
-        : '👤';
+        ? 'рџ“‹'
+        : 'рџ‘¤';
     const banTag = user.is_banned ? ' [BAN]' : '';
-    return [Markup.button.callback(`${roleTag} ${name}${banTag}`, `set_role_select_${user.telegram_user_id}_${page}`)];
+    const pendingTag = user.is_approved === false ? ' [PENDING]' : '';
+    return [Markup.button.callback(`${roleTag} ${name}${banTag}${pendingTag}`, `set_role_select_${user.telegram_user_id}_${page}`)];
   });
 
   const nav = [];
-  if (page > 0) nav.push(Markup.button.callback('⬅️', `users_page_${page - 1}`));
+  if (page > 0) nav.push(Markup.button.callback('в¬…пёЏ', `users_page_${page - 1}`));
   nav.push(Markup.button.callback(`${page + 1}/${totalPages}`, 'noop'));
-  if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `users_page_${page + 1}`));
+  if (page < totalPages - 1) nav.push(Markup.button.callback('вћЎпёЏ', `users_page_${page + 1}`));
   if (nav.length) rows.push(nav);
   return Markup.inlineKeyboard(rows);
 }
 
-function buildRoleSelectKeyboard(telegramUserId, { isBanned = false, page = 0 } = {}) {
-  return Markup.inlineKeyboard([
+function buildRoleSelectKeyboard(telegramUserId, { isApproved = true, isBanned = false, page = 0 } = {}) {
+  const rows = [
     [
-      Markup.button.callback('👤 user', `set_role_${telegramUserId}_user`),
-      Markup.button.callback('📋 manager', `set_role_${telegramUserId}_manager`),
-      Markup.button.callback('🛡 admin', `set_role_${telegramUserId}_admin`),
+      Markup.button.callback('рџ‘¤ user', `set_role_${telegramUserId}_user`),
+      Markup.button.callback('рџ“‹ manager', `set_role_${telegramUserId}_manager`),
+      Markup.button.callback('рџ›Ў admin', `set_role_${telegramUserId}_admin`),
     ],
-    [Markup.button.callback(isBanned ? 'Разбанить' : 'Забанить', `toggle_ban_${telegramUserId}_${isBanned ? 0 : 1}_${page}`)],
-    [Markup.button.callback('« Назад', `users_page_${page}`)],
-  ]);
+  ];
+
+  if (!isApproved) {
+    rows.push([Markup.button.callback('Подтвердить регистрацию', `approve_registration_${telegramUserId}`)]);
+  }
+
+  rows.push([Markup.button.callback(isBanned ? 'Р Р°Р·Р±Р°РЅРёС‚СЊ' : 'Р—Р°Р±Р°РЅРёС‚СЊ', `toggle_ban_${telegramUserId}_${isBanned ? 0 : 1}_${page}`)]);
+  rows.push([Markup.button.callback('В« РќР°Р·Р°Рґ', `users_page_${page}`)]);
+  return Markup.inlineKeyboard(rows);
 }
 
 function buildEditEquipmentKeyboard() {
@@ -76,7 +83,7 @@ function buildPhoneRequestKeyboard() {
 
 function buildLocationRequestKeyboard() {
   return Markup.keyboard([
-    [Markup.button.locationRequest('Отправить геолокацию')],
+    [Markup.button.locationRequest('РћС‚РїСЂР°РІРёС‚СЊ РіРµРѕР»РѕРєР°С†РёСЋ')],
     [LABELS.back],
   ]).resize();
 }
@@ -103,9 +110,9 @@ function buildBrandListKeyboard(categoryName, brands, page, totalPages, pageOffs
 
   if (totalPages > 1) {
     const nav = [];
-    if (page > 0) nav.push(Markup.button.callback('⬅️', `brandPage_${page - 1}`));
+    if (page > 0) nav.push(Markup.button.callback('в¬…пёЏ', `brandPage_${page - 1}`));
     nav.push(Markup.button.callback(`${page + 1}/${totalPages}`, 'noop'));
-    if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `brandPage_${page + 1}`));
+    if (page < totalPages - 1) nav.push(Markup.button.callback('вћЎпёЏ', `brandPage_${page + 1}`));
     rows.push(nav);
   }
 
@@ -120,7 +127,7 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
   const showBrand = Boolean(options.showBrand);
 
   const rows = pageItems.map((item, index) => {
-    const brandPrefix = showBrand && item.brand ? `${item.brand} • ` : '';
+    const brandPrefix = showBrand && item.brand ? `${item.brand} вЂў ` : '';
     const displayIndex = start + index + 1;
     return [
       Markup.button.callback(
@@ -132,19 +139,19 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
 
   if (totalPages > 1) {
     const nav = [];
-    if (safePage > 0) nav.push(Markup.button.callback('⬅️', `itemsPage_${safePage - 1}`));
+    if (safePage > 0) nav.push(Markup.button.callback('в¬…пёЏ', `itemsPage_${safePage - 1}`));
     nav.push(Markup.button.callback(`${safePage + 1}/${totalPages}`, 'noop'));
-    if (safePage < totalPages - 1) nav.push(Markup.button.callback('➡️', `itemsPage_${safePage + 1}`));
+    if (safePage < totalPages - 1) nav.push(Markup.button.callback('вћЎпёЏ', `itemsPage_${safePage + 1}`));
     rows.push(nav);
   }
 
-  rows.push([Markup.button.callback('↩️ Назад', 'back_brandlist')]);
+  rows.push([Markup.button.callback('в†©пёЏ РќР°Р·Р°Рґ', 'back_brandlist')]);
   return Markup.inlineKeyboard(rows);
 }
 
 function buildCategoryExportKeyboard(categoryName) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('📄 Экспорт в Excel', `excelCategory_${encodeURIComponent(categoryName)}`)],
+    [Markup.button.callback('рџ“„ Р­РєСЃРїРѕСЂС‚ РІ Excel', `excelCategory_${encodeURIComponent(categoryName)}`)],
   ]);
 }
 
@@ -173,8 +180,8 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
 
   const selectedMap = new Map(selectedComponents.map((item) => [item.name, item.qty]));
   const rows = [[
-    Markup.button.callback('Минимум', `applyGivePreset_${equipmentId}_minimal`),
-    Markup.button.callback('Полный комплект', `applyGivePreset_${equipmentId}_full`),
+    Markup.button.callback('РњРёРЅРёРјСѓРј', `applyGivePreset_${equipmentId}_minimal`),
+    Markup.button.callback('РџРѕР»РЅС‹Р№ РєРѕРјРїР»РµРєС‚', `applyGivePreset_${equipmentId}_full`),
   ]];
 
   for (const name of orderedNames) {
@@ -187,14 +194,14 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
 
     rows.push([
       Markup.button.callback(
-        `${selected ? '✅' : '⬜'} ${name}`,
+        `${selected ? 'вњ…' : 'в¬њ'} ${name}`,
         `toggleGiveComponent_${equipmentId}_${componentKey}`,
       ),
     ]);
 
     if (selected && isQuantity && isQuantityComponent(name, preset)) {
       rows.push([
-        Markup.button.callback('−', `decrementGiveComponent_${equipmentId}_${componentKey}`),
+        Markup.button.callback('в€’', `decrementGiveComponent_${equipmentId}_${componentKey}`),
         Markup.button.callback(`${qty}`, 'noop'),
         Markup.button.callback('+', `incrementGiveComponent_${equipmentId}_${componentKey}`),
       ]);
@@ -202,9 +209,9 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
   }
 
   rows.push([
-    Markup.button.callback('🗑 Очистить', `applyGivePreset_${equipmentId}_clear`),
-    Markup.button.callback('✅ Готово', `finishGiveComponents_${equipmentId}`),
-    Markup.button.callback('↩️ Назад', `open_${equipmentId}`),
+    Markup.button.callback('рџ—‘ РћС‡РёСЃС‚РёС‚СЊ', `applyGivePreset_${equipmentId}_clear`),
+    Markup.button.callback('вњ… Р“РѕС‚РѕРІРѕ', `finishGiveComponents_${equipmentId}`),
+    Markup.button.callback('в†©пёЏ РќР°Р·Р°Рґ', `open_${equipmentId}`),
   ]);
 
   return Markup.inlineKeyboard(rows);
@@ -213,13 +220,13 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
 function buildMyEquipmentKeyboard(items) {
   const rows = items.map((item) => [
     Markup.button.callback(
-      `${item.category || '-'} • ${item.model || '-'} - ${item.serial_number || '-'}`,
+      `${item.category || '-'} вЂў ${item.model || '-'} - ${item.serial_number || '-'}`,
       `open_${item.id}`,
     ),
   ]);
   rows.push([
-    Markup.button.callback('⏳ Продлить', 'extendAllMy'),
-    Markup.button.callback('↩️ Вернуть', 'returnAllMy'),
+    Markup.button.callback('вЏі РџСЂРѕРґР»РёС‚СЊ', 'extendAllMy'),
+    Markup.button.callback('в†©пёЏ Р’РµСЂРЅСѓС‚СЊ', 'returnAllMy'),
   ]);
   return Markup.inlineKeyboard(rows);
 }
@@ -229,10 +236,10 @@ function buildMyEquipmentSelectionKeyboard(items, mode, selectedIds = []) {
   const allSelected = items.length > 0 && items.every((item) => selectedSet.has(Number(item.id)));
   const rows = items.map((item) => {
     const isSelected = selectedSet.has(Number(item.id));
-    const marker = isSelected ? '✅' : '⬜';
+    const marker = isSelected ? 'вњ…' : 'в¬њ';
     return [
       Markup.button.callback(
-        `${marker} ${item.category || '-'} • ${item.model || '-'} - ${item.serial_number || '-'}`,
+        `${marker} ${item.category || '-'} вЂў ${item.model || '-'} - ${item.serial_number || '-'}`,
         `toggleMyEquipmentSelection_${mode}_${item.id}`,
       ),
     ];
@@ -241,7 +248,7 @@ function buildMyEquipmentSelectionKeyboard(items, mode, selectedIds = []) {
   if (items.length > 1) {
     rows.push([
       Markup.button.callback(
-        allSelected ? '☑️ Снять всё' : '✅ Выбрать всё',
+        allSelected ? 'в‘пёЏ РЎРЅСЏС‚СЊ РІСЃС‘' : 'вњ… Р’С‹Р±СЂР°С‚СЊ РІСЃС‘',
         `toggleAllMyEquipmentSelection_${mode}`,
       ),
     ]);
@@ -249,11 +256,11 @@ function buildMyEquipmentSelectionKeyboard(items, mode, selectedIds = []) {
 
   rows.push([
     Markup.button.callback(
-      mode === 'extend' ? '⏳ Продлить выбранное' : '↩️ Вернуть выбранное',
+      mode === 'extend' ? 'вЏі РџСЂРѕРґР»РёС‚СЊ РІС‹Р±СЂР°РЅРЅРѕРµ' : 'в†©пёЏ Р’РµСЂРЅСѓС‚СЊ РІС‹Р±СЂР°РЅРЅРѕРµ',
       `confirmMyEquipmentSelection_${mode}`,
     ),
   ]);
-  rows.push([Markup.button.callback('❌ Отмена', 'cancelMyEquipmentSelection')]);
+  rows.push([Markup.button.callback('вќЊ РћС‚РјРµРЅР°', 'cancelMyEquipmentSelection')]);
 
   return Markup.inlineKeyboard(rows);
 }

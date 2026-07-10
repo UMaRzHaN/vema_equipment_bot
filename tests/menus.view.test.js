@@ -21,7 +21,7 @@ describe('buildMyEquipmentSelectionKeyboard', () => {
     const markup = buildMyEquipmentSelectionKeyboard(items, 'extend', [10]);
     const inline = markup.reply_markup.inline_keyboard;
 
-    assert.match(inline[0][0].text, /✅/);
+    assert.match(inline[0][0].text, /вњ…/);
     assert.equal(inline[0][0].callback_data, 'toggleMyEquipmentSelection_extend_10');
     assert.equal(inline[1][0].callback_data, 'toggleMyEquipmentSelection_extend_11');
     assert.equal(inline[2][0].callback_data, 'toggleAllMyEquipmentSelection_extend');
@@ -32,7 +32,7 @@ describe('buildMyEquipmentSelectionKeyboard', () => {
   it('switches confirm caption for return mode', () => {
     const markup = buildMyEquipmentSelectionKeyboard(items, 'return', []);
     const inline = markup.reply_markup.inline_keyboard;
-    assert.match(inline[3][0].text, /Вернуть/);
+    assert.match(inline[3][0].text, /Р’РµСЂРЅСѓС‚СЊ/);
     assert.equal(inline[3][0].callback_data, 'confirmMyEquipmentSelection_return');
   });
 });
@@ -99,11 +99,27 @@ describe('user admin keyboards', () => {
     assert.equal(inline[0][0].callback_data, 'set_role_select_123_2');
   });
 
+  it('marks pending users in the list', () => {
+    const markup = buildUserListKeyboard([
+      { telegram_user_id: 124, first_name: 'Petr', last_name: 'Ivanov', role: 'user', is_banned: false, is_approved: false },
+    ], 0, 1);
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.match(inline[0][0].text, /\[PENDING\]/);
+  });
+
   it('shows unban action when user is already banned', () => {
     const markup = buildRoleSelectKeyboard(123, { isBanned: true, page: 2 });
     const inline = markup.reply_markup.inline_keyboard;
 
     assert.equal(inline[1][0].callback_data, 'toggle_ban_123_0_2');
     assert.equal(inline[2][0].callback_data, 'users_page_2');
+  });
+
+  it('shows registration approval action for pending users', () => {
+    const markup = buildRoleSelectKeyboard(123, { isApproved: false, isBanned: false, page: 2 });
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.equal(inline[1][0].callback_data, 'approve_registration_123');
   });
 });
