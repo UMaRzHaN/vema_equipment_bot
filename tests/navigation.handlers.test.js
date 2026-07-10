@@ -59,7 +59,7 @@ describe('registerNavigationHandlers', () => {
         setUserBanned: async () => {},
       },
       '../../services/notification.service': {
-        enqueueRegistrationApprovedNotification: async (userId) => { notifications.push(userId); },
+        buildRegistrationApprovedMessage: () => 'approved',
       },
       '../utils/profile.utils': {
         startProfileRegistration: async () => {},
@@ -87,12 +87,15 @@ describe('registerNavigationHandlers', () => {
       match: ['approve_registration_200', '200'],
       answerCbQuery: async () => {},
       editMessageText: async (text) => { ctx.edited = text; },
+      telegram: {
+        sendMessage: async (chatId, text) => { notifications.push({ chatId, text }); },
+      },
     };
 
     await entry.handler(ctx);
 
     assert.deepEqual(approvalCalls, [{ userId: 200, approved: true }]);
-    assert.deepEqual(notifications, [200]);
+    assert.deepEqual(notifications, [{ chatId: 200, text: 'approved' }]);
     assert.match(ctx.edited, /подтверждена/i);
   });
 });

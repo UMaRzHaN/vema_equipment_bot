@@ -6,6 +6,7 @@ const {
   findUserByTelegramId,
   findUsersByTelegramIds,
   getAllUsers,
+  getUsersByRole,
   hasActiveEquipment,
   setUserApprovalStatus,
   setUserBanStatus,
@@ -76,6 +77,18 @@ async function listAllUsersPaged({ page = 0, limit = 5 } = {}) {
   return { users, total, page, limit, totalPages: Math.max(Math.ceil(total / limit), 1) };
 }
 
+async function getAllAdminTelegramIds(envAdminIds = []) {
+  const roleAdmins = await getUsersByRole('admin');
+  return [
+    ...new Set([
+      ...envAdminIds,
+      ...roleAdmins.map((user) => user.telegram_user_id),
+    ]),
+  ]
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
 async function assignUserRole(telegramUserId, role) {
   await setUserRole(telegramUserId, role);
 }
@@ -103,6 +116,7 @@ module.exports = {
   assignUserRole,
   deleteUserAccount,
   formatUser,
+  getAllAdminTelegramIds,
   getUserByTelegramId,
   getUsersByTelegramIds,
   isUserApproved,

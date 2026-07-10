@@ -5,9 +5,10 @@ const { config } = require('../../config');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
 const { FLOW_TYPE } = require('../fsm/states');
-const { deleteUserAccount, saveUser, getUserByTelegramId, setUserApproved } = require('../../services/user.service');
-const { enqueueNewRegistrationNotification } = require('../../services/notification.service');
+const { deleteUserAccount, saveUser, getAllAdminTelegramIds, getUserByTelegramId, setUserApproved } = require('../../services/user.service');
+const { buildNewRegistrationMessage, buildRegistrationApprovalReplyMarkup } = require('../../services/notification.service');
 const logger = require('../../utils/logger');
+const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
 const { safe } = require('../middlewares/error.handler');
 
@@ -40,11 +41,32 @@ function isValidPhone(phone) {
   return phone.replace(/[^\d]/g, '').length >= 7;
 }
 
-async function notifyAdminsAboutRegistration(telegramUserId) {
+async function notifyAdminsAboutRegistration(ctx, telegramUserId) {
   try {
-    await enqueueNewRegistrationNotification(telegramUserId, config.bot.adminIds);
+    const adminIds = await getAllAdminTelegramIds(config.bot.adminIds);
+    if (!adminIds.length) {
+      logger.warn({ telegramUserId }, 'No admin recipients configured for registration approval');
+      return;
+    }
+
+    const user = await getUserByTelegramId(telegramUserId);
+    if (!user) {
+      logger.warn({ telegramUserId }, 'Cannot send registration approval request: user not found');
+      return;
+    }
+
+    const message = buildNewRegistrationMessage(user);
+    const replyMarkup = buildRegistrationApprovalReplyMarkup(telegramUserId);
+
+    await Promise.allSettled(
+      adminIds.map((adminId) => ctx.telegram.sendMessage(adminId, message, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        reply_markup: replyMarkup,
+      })),
+    );
   } catch (err) {
-    logger.error({ err: err.message, telegramUserId }, 'Failed to enqueue new registration notification');
+    logger.error({ err: err.message, telegramUserId }, 'Failed to send new registration notification to admins');
   }
 }
 
@@ -72,7 +94,7 @@ function registerProfileHandlers(bot) {
 
   bot.hears('🏠 Главное меню', safe((ctx) => {
     resetFlow(ctx);
-    return ctx.reply('Главное меню');
+    return ctx.reply('Главное меню', mainMenu(ctx));
   }, 'profile:mainMenu'));
 
   bot.hears('🗑️ Удалить профиль', safe((ctx) => {
@@ -139,7 +161,7 @@ function registerProfileHandlers(bot) {
 
         await saveUser({ telegramId: ctx.from.id, firstName, lastName: text, phone });
         await setUserApproved(ctx.from.id, false);
-        await notifyAdminsAboutRegistration(ctx.from.id);
+        await notifyAdminsAboutRegistration(ctx, ctx.from.id);
         resetFlow(ctx);
         await ctx.reply('Данные отправлены администратору на подтверждение.', removeKeyboard());
         return ctx.reply('Ожидайте подтверждения регистрации.');

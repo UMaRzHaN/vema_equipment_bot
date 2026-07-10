@@ -16,7 +16,7 @@ const {
 } = require('../../services/equipment.service');
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
 const { assignUserRole, getUserByTelegramId, isUserApproved, isUserProfileComplete, listAllUsersPaged, setUserApproved, setUserBanned } = require('../../services/user.service');
-const { enqueueRegistrationApprovedNotification } = require('../../services/notification.service');
+const { buildRegistrationApprovedMessage } = require('../../services/notification.service');
 const { startProfileRegistration, renderProfileCard } = require('../utils/profile.utils');
 const { getEquipmentSuggestionText } = require('../helpers/equipmentHints');
 const {
@@ -394,7 +394,9 @@ function registerNavigationHandlers(bot) {
     }
 
     await setUserApproved(telegramUserId, true);
-    await enqueueRegistrationApprovedNotification(telegramUserId);
+    await ctx.telegram.sendMessage(telegramUserId, buildRegistrationApprovedMessage(), {
+      link_preview_options: { is_disabled: true },
+    });
     await ctx.answerCbQuery('Регистрация подтверждена.');
 
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
