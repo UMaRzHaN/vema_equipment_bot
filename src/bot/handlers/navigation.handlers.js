@@ -15,7 +15,8 @@ const {
   listEquipmentByCategoryAndBrand,
 } = require('../../services/equipment.service');
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
-const { assignUserRole, getUserByTelegramId, isUserProfileComplete, listAllUsersPaged } = require('../../services/user.service');
+const { assignUserRole, getUserByTelegramId, isUserApproved, isUserProfileComplete, listAllUsersPaged, setUserApproved, setUserBanned } = require('../../services/user.service');
+const { enqueueRegistrationApprovedNotification } = require('../../services/notification.service');
 const { startProfileRegistration, renderProfileCard } = require('../utils/profile.utils');
 const { getEquipmentSuggestionText } = require('../helpers/equipmentHints');
 const {
@@ -63,6 +64,10 @@ async function ensureRegistered(ctx) {
   const user = await getUserByTelegramId(ctx.from.id);
   if (!isUserProfileComplete(user)) {
     startProfileRegistration(ctx, 'Сначала заполните профиль.');
+    return false;
+  }
+  if (!isUserApproved(user)) {
+    await ctx.reply('Ваша регистрация ожидает подтверждения администратора.');
     return false;
   }
   return true;
@@ -313,16 +318,18 @@ function registerNavigationHandlers(bot) {
     return ctx.editMessageText('👥 Пользователи:', buildUserListKeyboard(users, page, totalPages));
   }, 'users_page'));
 
-  bot.action(/set_role_select_(\d+)/, safe(async (ctx) => {
+  bot.action(/set_role_select_(\d+)_(\d+)/, safe(async (ctx) => {
     if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
     await ctx.answerCbQuery();
     const telegramUserId = Number(ctx.match[1]);
+    const page = Number(ctx.match[2]) || 0;
     const user = await getUserByTelegramId(telegramUserId);
     if (!user) return ctx.answerCbQuery('Пользователь не найден.', { show_alert: true });
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
+    const status = user.is_banned ? 'заблокирован' : 'активен';
     return ctx.editMessageText(
-      `👤 ${name}\nТелефон: ${user.phone || '—'}\nТекущая роль: ${user.role || 'user'}\n\nВыберите новую роль:`,
-      buildRoleSelectKeyboard(telegramUserId),
+      `👤 ${name}\nТелефон: ${user.phone || '—'}\nТекущая роль: ${user.role || 'user'}\nСтатус: ${status}\n\nВыберите действие:`,
+      buildRoleSelectKeyboard(telegramUserId, { isBanned: Boolean(user.is_banned), page }),
     );
   }, 'set_role_select'));
 
@@ -338,6 +345,61 @@ function registerNavigationHandlers(bot) {
       : `#${telegramUserId}`;
     return ctx.editMessageText(`✅ Роль пользователя ${name} изменена на: ${newRole}`);
   }, 'set_role'));
+
+  bot.action(/toggle_ban_(\d+)_(0|1)_(\d+)/, safe(async (ctx) => {
+    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+
+    const telegramUserId = Number(ctx.match[1]);
+    const shouldBan = ctx.match[2] === '1';
+    const page = Number(ctx.match[3]) || 0;
+
+    if (telegramUserId === ctx.from?.id) {
+      await ctx.answerCbQuery('Нельзя забанить самого себя.', { show_alert: true });
+      return;
+    }
+
+    await setUserBanned(telegramUserId, shouldBan);
+    await ctx.answerCbQuery(shouldBan ? 'Пользователь заблокирован.' : 'Пользователь разблокирован.');
+
+    const user = await getUserByTelegramId(telegramUserId);
+    const name = user
+      ? ([user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`)
+      : `#${telegramUserId}`;
+    const status = shouldBan ? 'заблокирован' : 'активен';
+
+    return ctx.editMessageText(
+      `✅ Статус пользователя ${name} обновлён.\nТекущий статус: ${status}`,
+      buildRoleSelectKeyboard(telegramUserId, { isBanned: shouldBan, page }),
+    );
+  }, 'toggle_ban'));
+
+  bot.action(/approve_registration_(\d+)/, safe(async (ctx) => {
+    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+
+    const telegramUserId = Number(ctx.match[1]);
+    const user = await getUserByTelegramId(telegramUserId);
+    if (!user) {
+      await ctx.answerCbQuery('Пользователь не найден.', { show_alert: true });
+      return;
+    }
+
+    if (user.is_banned) {
+      await ctx.answerCbQuery('Пользователь заблокирован.', { show_alert: true });
+      return;
+    }
+
+    if (isUserApproved(user)) {
+      await ctx.answerCbQuery('Регистрация уже подтверждена.');
+      return;
+    }
+
+    await setUserApproved(telegramUserId, true);
+    await enqueueRegistrationApprovedNotification(telegramUserId);
+    await ctx.answerCbQuery('Регистрация подтверждена.');
+
+    const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
+    return ctx.editMessageText(`✅ Регистрация пользователя ${name} подтверждена.`);
+  }, 'approve_registration'));
 
   bot.hears(/.*/, safe(async (ctx, next) => {
     if (!await ensureRegistered(ctx)) return;

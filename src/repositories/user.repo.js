@@ -49,6 +49,20 @@ async function setUserRole(telegramUserId, role) {
   );
 }
 
+async function setUserBanStatus(telegramUserId, isBanned) {
+  await query(
+    'UPDATE users SET is_banned = $1 WHERE telegram_user_id = $2',
+    [isBanned, telegramUserId],
+  );
+}
+
+async function setUserApprovalStatus(telegramUserId, isApproved) {
+  await query(
+    'UPDATE users SET is_approved = $1 WHERE telegram_user_id = $2',
+    [isApproved, telegramUserId],
+  );
+}
+
 async function getAllUsers({ limit = 20, offset = 0 } = {}) {
   const result = await query(
     'SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2',
@@ -91,4 +105,4 @@ async function getUsersByRole(role) {
   return result.rows;
 }
 
-module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, getUsersByRole, hasActiveEquipment, setUserRole, upsertTelegramUser, updateUserProfile };
+module.exports = { countUsers, deleteUserByTelegramId, findUserByTelegramId, findUsersByTelegramIds, getAllUsers, getUsersByRole, hasActiveEquipment, setUserApprovalStatus, setUserBanStatus, setUserRole, upsertTelegramUser, updateUserProfile };

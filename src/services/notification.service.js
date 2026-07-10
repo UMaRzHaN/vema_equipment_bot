@@ -25,6 +25,12 @@ function buildUserOverdueReplyMarkup() {
   ]).reply_markup;
 }
 
+function buildRegistrationApprovalReplyMarkup(userId) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("✅ Разрешить регистрацию", `approve_registration_${Number(userId)}`)],
+  ]).reply_markup;
+}
+
 function buildUserLink(userId, usersMap) {
   const normalizedUserId = String(userId);
   const user = usersMap.get(normalizedUserId) || usersMap.get(Number(userId));
@@ -33,6 +39,14 @@ function buildUserLink(userId, usersMap) {
     return `<a href="https://t.me/${encodeURIComponent(user.username)}">${label}</a>`;
   }
   return `<a href="tg://user?id=${Number(userId)}">${label}</a>`;
+}
+
+function buildSingleUserLink(user) {
+  const label = escapeHtml(formatUser(user) || String(user?.telegram_user_id || "unknown"));
+  if (user?.username) {
+    return `<a href="https://t.me/${encodeURIComponent(user.username)}">${label}</a>`;
+  }
+  return `<a href="tg://user?id=${Number(user?.telegram_user_id)}">${label}</a>`;
 }
 
 async function acquireOverdueCheckLock() {
@@ -69,6 +83,10 @@ function buildOverdueJobId(kind, recipientId) {
   return `${kind}:${recipientId}:${windowKey}`;
 }
 
+function buildStableNotificationJobId(kind, entityId) {
+  return `${kind}:${entityId}`;
+}
+
 function formatComponentsText(components) {
   const normalized = normalizeComponents(components);
   if (!normalized.length) return "без комплектующих";
@@ -89,7 +107,18 @@ function buildUserSection(userId, items, usersMap) {
   return [`Пользователь: ${buildUserLink(userId, usersMap)}`, lines].join("\n");
 }
 
+function buildNewRegistrationMessage(user) {
+  const nameLink = buildSingleUserLink(user);
+  const phone = escapeHtml(user?.phone || "—");
+  return `🆕 Запрос на регистрацию\n\nПользователь: ${nameLink}\nТелефон: ${phone}\n\nРазрешить регистрацию?`;
+}
+
+function buildRegistrationApprovedMessage() {
+  return "✅ Администратор подтвердил вашу регистрацию. Теперь бот доступен.";
+}
+
 function buildAdminOverdueMessageForRecipient(recipientId, itemsByUser, overdueDays, usersMap) {
+  void overdueDays;
   const recipientNumericId = Number(recipientId);
   const sections = Object.entries(itemsByUser)
     .filter(([userId]) => Number(userId) !== recipientNumericId)
@@ -102,6 +131,7 @@ function buildAdminOverdueMessageForRecipient(recipientId, itemsByUser, overdueD
 }
 
 function buildUserOverdueMessage(userId, items, overdueDays, usersMap) {
+  void overdueDays;
   const greeting = buildUserLink(userId, usersMap);
   const lines = items.map(buildEquipmentLine).join("\n\n");
 
@@ -146,6 +176,75 @@ async function enqueueOverdueNotificationForUser(userId, overdueDays = 7) {
   );
 
   return { sent: true, count: userItems.length, userId: targetUserId };
+}
+
+async function enqueueNewRegistrationNotification(userId, envAdminIds = []) {
+  const targetUserId = Number(userId);
+  if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+    throw new Error("Invalid telegram_user_id");
+  }
+
+  const roleAdmins = await getUsersByRole("admin");
+  const allAdminIds = [
+    ...new Set([
+      ...envAdminIds,
+      ...roleAdmins.map((user) => user.telegram_user_id),
+    ]),
+  ]
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (!allAdminIds.length) {
+    logger.warn({ userId: targetUserId }, "Skipping new registration notification: no admins configured");
+    return { sent: false, recipients: 0 };
+  }
+
+  const usersMap = await getUsersByTelegramIds([targetUserId]);
+  const user = usersMap.get(String(targetUserId)) || null;
+  if (!user) {
+    logger.warn({ userId: targetUserId }, "Skipping new registration notification: user missing from users table");
+    return { sent: false, recipients: 0 };
+  }
+
+  const notificationJob = await notificationQueue.add(
+    "sendNewRegistrationAdmins",
+    {
+      recipients: allAdminIds,
+      message: buildNewRegistrationMessage(user),
+      replyMarkup: buildRegistrationApprovalReplyMarkup(targetUserId),
+    },
+    buildNotificationJobOptions(buildStableNotificationJobId("sendNewRegistrationAdmins", targetUserId)),
+  );
+
+  logger.info(
+    { jobId: notificationJob.id, jobName: notificationJob.name, userId: targetUserId, recipientCount: allAdminIds.length },
+    "sendNewRegistrationAdmins job added to queue",
+  );
+
+  return { sent: true, recipients: allAdminIds.length };
+}
+
+async function enqueueRegistrationApprovedNotification(userId) {
+  const targetUserId = Number(userId);
+  if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+    throw new Error("Invalid telegram_user_id");
+  }
+
+  const notificationJob = await notificationQueue.add(
+    "sendRegistrationApprovedUser",
+    {
+      recipients: [targetUserId],
+      message: buildRegistrationApprovedMessage(),
+    },
+    buildNotificationJobOptions(buildStableNotificationJobId("sendRegistrationApprovedUser", targetUserId)),
+  );
+
+  logger.info(
+    { jobId: notificationJob.id, jobName: notificationJob.name, userId: targetUserId },
+    "sendRegistrationApprovedUser job added to queue",
+  );
+
+  return { sent: true, recipients: 1 };
 }
 
 async function runOverdueCheck(envAdminIds, overdueDays) {
@@ -292,8 +391,13 @@ async function scheduleOverdueCheck(envAdminIds, overdueDays) {
 }
 
 module.exports = {
+  buildNewRegistrationMessage,
+  buildRegistrationApprovalReplyMarkup,
+  buildRegistrationApprovedMessage,
   buildUserOverdueReplyMarkup,
+  enqueueNewRegistrationNotification,
   enqueueOverdueNotificationForUser,
+  enqueueRegistrationApprovedNotification,
   notificationQueue,
   runOverdueCheck,
   scheduleOverdueCheck,

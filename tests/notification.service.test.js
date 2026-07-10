@@ -146,3 +146,45 @@ describe('runOverdueCheck', () => {
     assert.equal(state.adds.length, 0);
   });
 });
+
+describe('enqueueNewRegistrationNotification', () => {
+  beforeEach(() => {
+    state.adds = [];
+    state.admins = [{ telegram_user_id: 100 }, { telegram_user_id: 999 }];
+    state.usersMap = new Map([
+      ['200', { telegram_user_id: 200, name: 'Ivan Petrov', username: 'ivan.petrov' }],
+    ]);
+    state.redisStore = new Map();
+  });
+
+  it('queues one admin notification with a clickable profile link', async () => {
+    const result = await service.enqueueNewRegistrationNotification(200, [100]);
+
+    assert.deepEqual(result, { sent: true, recipients: 2 });
+    assert.equal(state.adds.length, 1);
+    assert.equal(state.adds[0].name, 'sendNewRegistrationAdmins');
+    assert.deepEqual(state.adds[0].data.recipients, [100, 999]);
+    assert.equal(state.adds[0].options.jobId, 'sendNewRegistrationAdmins:200');
+    assert.match(state.adds[0].data.message, /Ivan Petrov/);
+    assert.match(state.adds[0].data.message, /<a href="https:\/\/t\.me\/ivan\.petrov">Ivan Petrov<\/a>/);
+    assert.match(state.adds[0].data.message, /Разрешить регистрацию/);
+    assert.equal(state.adds[0].data.replyMarkup.inline_keyboard[0][0].callback_data, 'approve_registration_200');
+  });
+});
+
+describe('enqueueRegistrationApprovedNotification', () => {
+  beforeEach(() => {
+    state.adds = [];
+  });
+
+  it('queues a success notification for the user', async () => {
+    const result = await service.enqueueRegistrationApprovedNotification(200);
+
+    assert.deepEqual(result, { sent: true, recipients: 1 });
+    assert.equal(state.adds.length, 1);
+    assert.equal(state.adds[0].name, 'sendRegistrationApprovedUser');
+    assert.deepEqual(state.adds[0].data.recipients, [200]);
+    assert.equal(state.adds[0].options.jobId, 'sendRegistrationApprovedUser:200');
+    assert.match(state.adds[0].data.message, /подтвердил вашу регистрацию/i);
+  });
+});

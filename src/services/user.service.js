@@ -7,6 +7,8 @@ const {
   findUsersByTelegramIds,
   getAllUsers,
   hasActiveEquipment,
+  setUserApprovalStatus,
+  setUserBanStatus,
   setUserRole,
   upsertTelegramUser,
   updateUserProfile,
@@ -49,6 +51,14 @@ function isUserProfileComplete(user) {
   return !!(user && user.first_name && user.last_name && user.phone);
 }
 
+function isUserBanned(user) {
+  return Boolean(user?.is_banned);
+}
+
+function isUserApproved(user) {
+  return Boolean(user?.is_approved);
+}
+
 function formatUser(user) {
   if (!user) return '-';
   const parts = [user.first_name, user.last_name].filter(Boolean);
@@ -70,6 +80,14 @@ async function assignUserRole(telegramUserId, role) {
   await setUserRole(telegramUserId, role);
 }
 
+async function setUserBanned(telegramUserId, isBanned) {
+  await setUserBanStatus(telegramUserId, isBanned);
+}
+
+async function setUserApproved(telegramUserId, isApproved) {
+  await setUserApprovalStatus(telegramUserId, isApproved);
+}
+
 async function deleteUserAccount(telegramUserId) {
   const active = await hasActiveEquipment(telegramUserId);
   if (active) {
@@ -87,8 +105,12 @@ module.exports = {
   formatUser,
   getUserByTelegramId,
   getUsersByTelegramIds,
+  isUserApproved,
+  isUserBanned,
   isUserProfileComplete,
   listAllUsersPaged,
   saveTelegramUser,
   saveUser,
+  setUserApproved,
+  setUserBanned,
 };

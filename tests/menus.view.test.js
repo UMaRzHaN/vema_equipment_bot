@@ -7,6 +7,8 @@ const {
   buildBrandListKeyboard,
   buildCategoryItemsKeyboard,
   buildMyEquipmentSelectionKeyboard,
+  buildRoleSelectKeyboard,
+  buildUserListKeyboard,
 } = require('../src/bot/views/menus');
 
 describe('buildMyEquipmentSelectionKeyboard', () => {
@@ -47,6 +49,7 @@ describe('buildCategoryItemsKeyboard', () => {
 
     assert.equal(backButton.callback_data, 'back_brandlist');
   });
+
   it('does not show brand in item text for all-brands mode', () => {
     const markup = buildCategoryItemsKeyboard(
       [{ id: 8, position: 1, brand: 'AddGlobe LLC', model: 'GFM 2.0', serial_number: 'SN-8' }],
@@ -82,5 +85,25 @@ describe('buildBrandListKeyboard', () => {
     assert.equal(inline[0][0].callback_data, 'brandSelect_all');
     assert.equal(inline[1][0].callback_data, 'brandSelect_0');
     assert.ok(Buffer.byteLength(inline[1][0].callback_data, 'utf8') <= 64);
+  });
+});
+
+describe('user admin keyboards', () => {
+  it('marks banned users in the list and preserves page in callback', () => {
+    const markup = buildUserListKeyboard([
+      { telegram_user_id: 123, first_name: 'Ivan', last_name: 'Petrov', role: 'user', is_banned: true },
+    ], 2, 4);
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.match(inline[0][0].text, /\[BAN\]/);
+    assert.equal(inline[0][0].callback_data, 'set_role_select_123_2');
+  });
+
+  it('shows unban action when user is already banned', () => {
+    const markup = buildRoleSelectKeyboard(123, { isBanned: true, page: 2 });
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.equal(inline[1][0].callback_data, 'toggle_ban_123_0_2');
+    assert.equal(inline[2][0].callback_data, 'users_page_2');
   });
 });

@@ -31,7 +31,8 @@ function buildUserListKeyboard(users, page, totalPages) {
       : user.role === 'manager'
         ? '📋'
         : '👤';
-    return [Markup.button.callback(`${roleTag} ${name}`, `set_role_select_${user.telegram_user_id}`)];
+    const banTag = user.is_banned ? ' [BAN]' : '';
+    return [Markup.button.callback(`${roleTag} ${name}${banTag}`, `set_role_select_${user.telegram_user_id}_${page}`)];
   });
 
   const nav = [];
@@ -42,14 +43,15 @@ function buildUserListKeyboard(users, page, totalPages) {
   return Markup.inlineKeyboard(rows);
 }
 
-function buildRoleSelectKeyboard(telegramUserId) {
+function buildRoleSelectKeyboard(telegramUserId, { isBanned = false, page = 0 } = {}) {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('👤 user', `set_role_${telegramUserId}_user`),
       Markup.button.callback('📋 manager', `set_role_${telegramUserId}_manager`),
       Markup.button.callback('🛡 admin', `set_role_${telegramUserId}_admin`),
     ],
-    [Markup.button.callback('« Назад', 'users_page_0')],
+    [Markup.button.callback(isBanned ? 'Разбанить' : 'Забанить', `toggle_ban_${telegramUserId}_${isBanned ? 0 : 1}_${page}`)],
+    [Markup.button.callback('« Назад', `users_page_${page}`)],
   ]);
 }
 

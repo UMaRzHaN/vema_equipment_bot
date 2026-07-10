@@ -1,6 +1,6 @@
 'use strict';
 
-const { getUserByTelegramId, isUserProfileComplete } = require('../../services/user.service');
+const { getUserByTelegramId, isUserApproved, isUserBanned, isUserProfileComplete } = require('../../services/user.service');
 const { resetFlow } = require('../utils');
 const logger = require('../../utils/logger');
 
@@ -13,7 +13,25 @@ async function registrationGuard(ctx, next) {
   if (ctx.session?.flow?.type === 'register_profile') return next();
 
   const user = await getUserByTelegramId(userId);
-  if (isUserProfileComplete(user)) return next();
+  if (isUserBanned(user)) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('Доступ к боту заблокирован.', { show_alert: true }).catch(() => {});
+    }
+
+    resetFlow(ctx);
+    return ctx.reply('Ваш доступ к боту заблокирован. Обратитесь к администратору.');
+  }
+
+  if (isUserProfileComplete(user) && isUserApproved(user)) return next();
+
+  if (isUserProfileComplete(user) && !isUserApproved(user)) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('Регистрация ожидает подтверждения администратора.', { show_alert: true }).catch(() => {});
+    }
+
+    resetFlow(ctx);
+    return ctx.reply('Ваша регистрация отправлена администратору и ожидает подтверждения.');
+  }
 
   // Answer pending callback so button doesn't hang
   if (ctx.callbackQuery) await ctx.answerCbQuery().catch(() => {});

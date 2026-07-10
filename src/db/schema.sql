@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
   first_name        TEXT,
   last_name         TEXT,
   phone             TEXT,
+  role              TEXT NOT NULL DEFAULT 'user',
+  is_banned         BOOLEAN NOT NULL DEFAULT FALSE,
+  is_approved       BOOLEAN NOT NULL DEFAULT TRUE,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

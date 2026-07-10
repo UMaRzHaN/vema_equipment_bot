@@ -1,11 +1,13 @@
 'use strict';
 
 const { Markup } = require('telegraf');
+const { config } = require('../../config');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
 const { FLOW_TYPE } = require('../fsm/states');
-const { deleteUserAccount, saveUser, getUserByTelegramId } = require('../../services/user.service');
-const { mainMenu } = require('../views/menus');
+const { deleteUserAccount, saveUser, getUserByTelegramId, setUserApproved } = require('../../services/user.service');
+const { enqueueNewRegistrationNotification } = require('../../services/notification.service');
+const logger = require('../../utils/logger');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
 const { safe } = require('../middlewares/error.handler');
 
@@ -38,6 +40,14 @@ function isValidPhone(phone) {
   return phone.replace(/[^\d]/g, '').length >= 7;
 }
 
+async function notifyAdminsAboutRegistration(telegramUserId) {
+  try {
+    await enqueueNewRegistrationNotification(telegramUserId, config.bot.adminIds);
+  } catch (err) {
+    logger.error({ err: err.message, telegramUserId }, 'Failed to enqueue new registration notification');
+  }
+}
+
 function registerProfileHandlers(bot) {
   bot.hears('✏️ Имя', safe((ctx) => {
     ensureSession(ctx);
@@ -62,7 +72,7 @@ function registerProfileHandlers(bot) {
 
   bot.hears('🏠 Главное меню', safe((ctx) => {
     resetFlow(ctx);
-    return ctx.reply('Главное меню', mainMenu(ctx));
+    return ctx.reply('Главное меню');
   }, 'profile:mainMenu'));
 
   bot.hears('🗑️ Удалить профиль', safe((ctx) => {
@@ -98,7 +108,6 @@ function registerProfileHandlers(bot) {
     return renderProfileCard(ctx);
   }, 'profile:cancelDelete'));
 
-  // Text
   bot.on('text', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;
@@ -106,7 +115,6 @@ function registerProfileHandlers(bot) {
 
     const text = ctx.message.text.trim();
 
-    // register_profile flow
     if (flow.type === 'register_profile') {
       if (flow.step === 1) {
         const phone = normalizePhone(text);
@@ -128,14 +136,16 @@ function registerProfileHandlers(bot) {
           resetFlow(ctx);
           return ctx.reply('Сессия устарела. Начните регистрацию заново.');
         }
+
         await saveUser({ telegramId: ctx.from.id, firstName, lastName: text, phone });
+        await setUserApproved(ctx.from.id, false);
+        await notifyAdminsAboutRegistration(ctx.from.id);
         resetFlow(ctx);
-        await ctx.reply('✅ Профиль сохранён', removeKeyboard());
-        return ctx.reply('Главное меню', mainMenu(ctx));
+        await ctx.reply('Данные отправлены администратору на подтверждение.', removeKeyboard());
+        return ctx.reply('Ожидайте подтверждения регистрации.');
       }
     }
 
-    // edit_profile flow
     if (flow.type === 'edit_profile') {
       const user = await getUserByTelegramId(ctx.from.id);
       const updated = {
@@ -158,7 +168,6 @@ function registerProfileHandlers(bot) {
     return next();
   }, 'profile:text'));
 
-  // Contact
   bot.on('contact', safe(async (ctx, next) => {
     ensureSession(ctx);
     const flow = ctx.session.flow;

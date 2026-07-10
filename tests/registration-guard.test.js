@@ -4,13 +4,12 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const proxyquire = require('proxyquire').noCallThru();
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function makeCtx(overrides = {}) {
   return {
-    from:          { id: 99 },
-    session:       { flow: null },
+    from: { id: 99 },
+    session: { flow: null },
     callbackQuery: null,
-    reply:         async () => {},
+    reply: async () => {},
     answerCbQuery: async () => {},
     ...overrides,
   };
@@ -19,7 +18,9 @@ function makeCtx(overrides = {}) {
 function loadGuard({ user = null, profileComplete = false } = {}) {
   const { registrationGuard } = proxyquire('../src/bot/middlewares/registration.guard', {
     '../../services/user.service': {
-      getUserByTelegramId:   async () => user,
+      getUserByTelegramId: async () => user,
+      isUserApproved: () => user?.is_approved !== false,
+      isUserBanned: () => Boolean(user?.is_banned),
       isUserProfileComplete: () => profileComplete,
     },
     '../utils': {
@@ -33,8 +34,7 @@ function loadGuard({ user = null, profileComplete = false } = {}) {
   return registrationGuard;
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-describe('registrationGuard — no ctx.from', () => {
+describe('registrationGuard - no ctx.from', () => {
   it('calls next() when ctx.from is missing', async () => {
     const guard = loadGuard();
     const ctx = makeCtx({ from: null });
@@ -44,7 +44,7 @@ describe('registrationGuard — no ctx.from', () => {
   });
 });
 
-describe('registrationGuard — already in register_profile flow', () => {
+describe('registrationGuard - already in register_profile flow', () => {
   it('calls next() without checking DB', async () => {
     const guard = loadGuard({ user: null, profileComplete: false });
     const ctx = makeCtx({ session: { flow: { type: 'register_profile' } } });
@@ -55,9 +55,12 @@ describe('registrationGuard — already in register_profile flow', () => {
   });
 });
 
-describe('registrationGuard — profile complete', () => {
+describe('registrationGuard - profile complete', () => {
   it('calls next() when profile is complete', async () => {
-    const guard = loadGuard({ user: { id: 99, first_name: 'Ivan', last_name: 'Petrov', phone: '+79001234567' }, profileComplete: true });
+    const guard = loadGuard({
+      user: { id: 99, first_name: 'Ivan', last_name: 'Petrov', phone: '+79001234567', is_approved: true },
+      profileComplete: true,
+    });
     const ctx = makeCtx();
     let nextCalled = false;
     await guard(ctx, async () => { nextCalled = true; });
@@ -66,7 +69,49 @@ describe('registrationGuard — profile complete', () => {
   });
 });
 
-describe('registrationGuard — incomplete profile', () => {
+describe('registrationGuard - waiting for approval', () => {
+  it('blocks access until admin approves registration', async () => {
+    const guard = loadGuard({
+      user: { id: 99, first_name: 'Ivan', last_name: 'Petrov', phone: '+79001234567', is_approved: false },
+      profileComplete: true,
+    });
+    const replies = [];
+    const ctx = makeCtx({
+      reply: async (text) => { replies.push(text); },
+      session: { flow: { type: 'add_equipment' } },
+    });
+    let nextCalled = false;
+
+    await guard(ctx, async () => { nextCalled = true; });
+
+    assert.equal(nextCalled, false);
+    assert.equal(ctx.session.flow, null);
+    assert.match(replies[0], /ожидает подтверждения/i);
+  });
+});
+
+describe('registrationGuard - banned user', () => {
+  it('blocks access and does not continue to next()', async () => {
+    const guard = loadGuard({
+      user: { id: 99, first_name: 'Ivan', last_name: 'Petrov', phone: '+79001234567', is_banned: true },
+      profileComplete: true,
+    });
+    const replies = [];
+    const ctx = makeCtx({
+      reply: async (text) => { replies.push(text); },
+      session: { flow: { type: 'add_equipment' } },
+    });
+    let nextCalled = false;
+
+    await guard(ctx, async () => { nextCalled = true; });
+
+    assert.equal(nextCalled, false);
+    assert.equal(ctx.session.flow, null);
+    assert.match(replies[0], /заблокирован/i);
+  });
+});
+
+describe('registrationGuard - incomplete profile', () => {
   it('starts registration instead of calling next()', async () => {
     const guard = loadGuard({ user: { id: 99, first_name: 'Ivan' }, profileComplete: false });
     const ctx = makeCtx();
@@ -96,7 +141,7 @@ describe('registrationGuard — incomplete profile', () => {
   });
 });
 
-describe('registrationGuard — user not found in DB', () => {
+describe('registrationGuard - user not found in DB', () => {
   it('starts registration when user is null', async () => {
     const guard = loadGuard({ user: null, profileComplete: false });
     const ctx = makeCtx();
