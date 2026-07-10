@@ -10,6 +10,7 @@ const { getEquipmentTimelinesBatch } = require('./history.service');
 const { formatUser, getUsersByTelegramIds } = require('./user.service');
 const { formatDate, formatDateOnly, statusLabel } = require('../utils/formatters');
 const { formatComponent, normalizeComponents } = require('../utils/components');
+const { STATUS } = require('../utils/constants');
 
 const DEFAULT_BRAND = 'Без бренда';
 const DEFAULT_WAREHOUSE = 'Ташкент';
