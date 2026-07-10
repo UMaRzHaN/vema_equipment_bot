@@ -150,25 +150,25 @@ describe('runOverdueCheck', () => {
 describe('enqueueNewRegistrationNotification', () => {
   beforeEach(() => {
     state.adds = [];
-    state.admins = [{ telegram_user_id: 100 }, { telegram_user_id: 999 }];
+    state.admins = [{ telegram_user_id: 100 }];
     state.usersMap = new Map([
       ['200', { telegram_user_id: 200, name: 'Ivan Petrov', username: 'ivan.petrov' }],
     ]);
     state.redisStore = new Map();
   });
 
-  it('queues one admin notification with a clickable profile link', async () => {
-    const result = await service.enqueueNewRegistrationNotification(200, [100]);
+  it('deduplicates admin ids after normalization and includes approve/deny actions', async () => {
+    const result = await service.enqueueNewRegistrationNotification(200, ['100', '100 ']);
 
-    assert.deepEqual(result, { sent: true, recipients: 2 });
+    assert.deepEqual(result, { sent: true, recipients: 1 });
     assert.equal(state.adds.length, 1);
     assert.equal(state.adds[0].name, 'sendNewRegistrationAdmins');
-    assert.deepEqual(state.adds[0].data.recipients, [100, 999]);
+    assert.deepEqual(state.adds[0].data.recipients, [100]);
     assert.equal(state.adds[0].options.jobId, 'sendNewRegistrationAdmins:200');
     assert.match(state.adds[0].data.message, /Ivan Petrov/);
     assert.match(state.adds[0].data.message, /<a href="https:\/\/t\.me\/ivan\.petrov">Ivan Petrov<\/a>/);
-    assert.match(state.adds[0].data.message, /Разрешить регистрацию/);
     assert.equal(state.adds[0].data.replyMarkup.inline_keyboard[0][0].callback_data, 'approve_registration_200');
+    assert.equal(state.adds[0].data.replyMarkup.inline_keyboard[0][1].callback_data, 'deny_registration_200');
   });
 });
 

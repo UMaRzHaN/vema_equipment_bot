@@ -54,10 +54,13 @@ function buildRoleSelectKeyboard(telegramUserId, { isApproved = true, isBanned =
   ];
 
   if (!isApproved) {
-    rows.push([Markup.button.callback('Подтвердить регистрацию', `approve_registration_${telegramUserId}`)]);
+    rows.push([
+      Markup.button.callback('✅ Подтвердить', `approve_registration_${telegramUserId}`),
+      Markup.button.callback('❌ Отклонить', `deny_registration_${telegramUserId}`),
+    ]);
   }
 
-  rows.push([Markup.button.callback(isBanned ? 'Разбанить' : 'Забанить', `toggle_ban_${telegramUserId}_${isBanned ? 0 : 1}_${page}`)]);
+  rows.push([Markup.button.callback(isBanned ? 'Разбанить' : 'Забанить и удалить', `toggle_ban_${telegramUserId}_${isBanned ? 0 : 1}_${page}`)]);
   rows.push([Markup.button.callback('« Назад', `users_page_${page}`)]);
   return Markup.inlineKeyboard(rows);
 }

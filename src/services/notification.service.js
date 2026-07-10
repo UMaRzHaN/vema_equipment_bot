@@ -27,7 +27,10 @@ function buildUserOverdueReplyMarkup() {
 
 function buildRegistrationApprovalReplyMarkup(userId) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("✅ Разрешить регистрацию", `approve_registration_${Number(userId)}`)],
+    [
+      Markup.button.callback("✅ Разрешить", `approve_registration_${Number(userId)}`),
+      Markup.button.callback("❌ Отклонить", `deny_registration_${Number(userId)}`),
+    ],
   ]).reply_markup;
 }
 
@@ -117,6 +120,10 @@ function buildRegistrationApprovedMessage() {
   return "✅ Администратор подтвердил вашу регистрацию. Теперь бот доступен.";
 }
 
+function buildRegistrationDeniedMessage() {
+  return "❌ Администратор отклонил регистрацию. При необходимости вы можете начать заново через /start.";
+}
+
 function buildAdminOverdueMessageForRecipient(recipientId, itemsByUser, overdueDays, usersMap) {
   void overdueDays;
   const recipientNumericId = Number(recipientId);
@@ -186,13 +193,15 @@ async function enqueueNewRegistrationNotification(userId, envAdminIds = []) {
 
   const roleAdmins = await getUsersByRole("admin");
   const allAdminIds = [
-    ...new Set([
-      ...envAdminIds,
-      ...roleAdmins.map((user) => user.telegram_user_id),
-    ]),
-  ]
-    .map(Number)
-    .filter((id) => Number.isInteger(id) && id > 0);
+    ...new Set(
+      [
+        ...envAdminIds,
+        ...roleAdmins.map((user) => user.telegram_user_id),
+      ]
+        .map((id) => Number(String(id).trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
 
   if (!allAdminIds.length) {
     logger.warn({ userId: targetUserId }, "Skipping new registration notification: no admins configured");
@@ -394,6 +403,7 @@ module.exports = {
   buildNewRegistrationMessage,
   buildRegistrationApprovalReplyMarkup,
   buildRegistrationApprovedMessage,
+  buildRegistrationDeniedMessage,
   buildUserOverdueReplyMarkup,
   enqueueNewRegistrationNotification,
   enqueueOverdueNotificationForUser,

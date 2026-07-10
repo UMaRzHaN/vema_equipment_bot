@@ -5,8 +5,17 @@ const { config } = require('../../config');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
 const { FLOW_TYPE } = require('../fsm/states');
-const { deleteUserAccount, saveUser, getAllAdminTelegramIds, getUserByTelegramId, setUserApproved } = require('../../services/user.service');
-const { buildNewRegistrationMessage, buildRegistrationApprovalReplyMarkup } = require('../../services/notification.service');
+const {
+  deleteUserAccount,
+  saveUser,
+  getAllAdminTelegramIds,
+  getUserByTelegramId,
+  setUserApproved,
+} = require('../../services/user.service');
+const {
+  buildNewRegistrationMessage,
+  buildRegistrationApprovalReplyMarkup,
+} = require('../../services/notification.service');
 const logger = require('../../utils/logger');
 const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');

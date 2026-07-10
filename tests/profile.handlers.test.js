@@ -21,13 +21,13 @@ function createBotStub() {
 }
 
 describe('registerProfileHandlers', () => {
-  it('enqueues admin notification after successful profile registration', async () => {
+  it('sends one admin notification after successful profile registration', async () => {
     let savedPayload = null;
     const approvalCalls = [];
     const sentMessages = [];
 
     const { registerProfileHandlers } = proxyquire('../src/bot/handlers/profile.handlers', {
-      '../../config': { config: { bot: { adminIds: [100] } } },
+      '../../config': { config: { bot: { adminIds: ['100', '100 '] } } },
       '../../services/user.service': {
         deleteUserAccount: async () => {},
         getAllAdminTelegramIds: async () => [100],
@@ -39,7 +39,7 @@ describe('registerProfileHandlers', () => {
         buildNewRegistrationMessage: () => 'approve me',
         buildRegistrationApprovalReplyMarkup: () => ({ inline_keyboard: [[{ text: 'ok', callback_data: 'approve_registration_200' }]] }),
       },
-      '../../utils/logger': { error: () => {} },
+      '../../utils/logger': { error: () => {}, warn: () => {} },
       '../utils': {
         ensureSession: () => {},
         resetFlow: (ctx) => { ctx.session.flow = null; },

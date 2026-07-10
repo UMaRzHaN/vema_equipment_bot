@@ -116,10 +116,18 @@ describe('user admin keyboards', () => {
     assert.equal(inline[2][0].callback_data, 'users_page_2');
   });
 
-  it('shows registration approval action for pending users', () => {
+  it('shows delete-on-ban action for active users', () => {
+    const markup = buildRoleSelectKeyboard(123, { isBanned: false, page: 2 });
+    const inline = markup.reply_markup.inline_keyboard;
+
+    assert.match(inline[1][0].text, /Забанить и удалить/);
+  });
+
+  it('shows registration approval and deny actions for pending users', () => {
     const markup = buildRoleSelectKeyboard(123, { isApproved: false, isBanned: false, page: 2 });
     const inline = markup.reply_markup.inline_keyboard;
 
     assert.equal(inline[1][0].callback_data, 'approve_registration_123');
+    assert.equal(inline[1][1].callback_data, 'deny_registration_123');
   });
 });

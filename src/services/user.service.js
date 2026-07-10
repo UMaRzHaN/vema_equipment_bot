@@ -80,13 +80,15 @@ async function listAllUsersPaged({ page = 0, limit = 5 } = {}) {
 async function getAllAdminTelegramIds(envAdminIds = []) {
   const roleAdmins = await getUsersByRole('admin');
   return [
-    ...new Set([
-      ...envAdminIds,
-      ...roleAdmins.map((user) => user.telegram_user_id),
-    ]),
-  ]
-    .map(Number)
-    .filter((id) => Number.isInteger(id) && id > 0);
+    ...new Set(
+      [
+        ...envAdminIds,
+        ...roleAdmins.map((user) => user.telegram_user_id),
+      ]
+        .map((id) => Number(String(id).trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
 }
 
 async function assignUserRole(telegramUserId, role) {

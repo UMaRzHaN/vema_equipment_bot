@@ -15,8 +15,20 @@ const {
   listEquipmentByCategoryAndBrand,
 } = require('../../services/equipment.service');
 const { buildSummaryText, buildCategoryXlsx, createCategoryImage } = require('../../services/report.service');
-const { assignUserRole, getUserByTelegramId, isUserApproved, isUserProfileComplete, listAllUsersPaged, setUserApproved, setUserBanned } = require('../../services/user.service');
-const { buildRegistrationApprovedMessage } = require('../../services/notification.service');
+const {
+  assignUserRole,
+  deleteUserAccount,
+  getUserByTelegramId,
+  isUserApproved,
+  isUserProfileComplete,
+  listAllUsersPaged,
+  setUserApproved,
+  setUserBanned,
+} = require('../../services/user.service');
+const {
+  buildRegistrationApprovedMessage,
+  buildRegistrationDeniedMessage,
+} = require('../../services/notification.service');
 const { startProfileRegistration, renderProfileCard } = require('../utils/profile.utils');
 const { getEquipmentSuggestionText } = require('../helpers/equipmentHints');
 const {
@@ -362,18 +374,33 @@ function registerNavigationHandlers(bot) {
       return;
     }
 
-    await setUserBanned(telegramUserId, shouldBan);
-    await ctx.answerCbQuery(shouldBan ? 'Пользователь заблокирован.' : 'Пользователь разблокирован.');
-
     const user = await getUserByTelegramId(telegramUserId);
     const name = user
       ? ([user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`)
       : `#${telegramUserId}`;
-    const status = shouldBan ? 'заблокирован' : 'активен';
+
+    if (shouldBan) {
+      try {
+        await deleteUserAccount(telegramUserId);
+      } catch (err) {
+        if (err.code === 'HAS_EQUIPMENT') {
+          await ctx.answerCbQuery('Нельзя удалить пользователя с активным оборудованием.', { show_alert: true });
+          return;
+        }
+        throw err;
+      }
+
+      await ctx.answerCbQuery('Пользователь заблокирован и удалён.');
+      return ctx.editMessageText(`❌ Пользователь ${name} заблокирован и удалён из базы.`);
+    }
+
+    await setUserBanned(telegramUserId, false);
+    await ctx.answerCbQuery('Пользователь разблокирован.');
+    const status = 'активен';
 
     return ctx.editMessageText(
       `✅ Статус пользователя ${name} обновлён.\nТекущий статус: ${status}`,
-      buildRoleSelectKeyboard(telegramUserId, { isBanned: shouldBan, page }),
+      buildRoleSelectKeyboard(telegramUserId, { isBanned: false, page }),
     );
   }, 'toggle_ban'));
 
@@ -406,6 +433,40 @@ function registerNavigationHandlers(bot) {
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
     return ctx.editMessageText(`✅ Регистрация пользователя ${name} подтверждена.`);
   }, 'approve_registration'));
+
+  bot.action(/deny_registration_(\d+)/, safe(async (ctx) => {
+    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+
+    const telegramUserId = Number(ctx.match[1]);
+    const user = await getUserByTelegramId(telegramUserId);
+    if (!user) {
+      await ctx.answerCbQuery('Пользователь не найден.', { show_alert: true });
+      return;
+    }
+
+    if (isUserApproved(user)) {
+      await ctx.answerCbQuery('Регистрация уже подтверждена.');
+      return;
+    }
+
+    try {
+      await deleteUserAccount(telegramUserId);
+    } catch (err) {
+      if (err.code === 'HAS_EQUIPMENT') {
+        await ctx.answerCbQuery('Нельзя отклонить пользователя с активным оборудованием.', { show_alert: true });
+        return;
+      }
+      throw err;
+    }
+
+    await ctx.telegram.sendMessage(telegramUserId, buildRegistrationDeniedMessage(), {
+      link_preview_options: { is_disabled: true },
+    }).catch(() => {});
+    await ctx.answerCbQuery('Регистрация отклонена.');
+
+    const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `#${telegramUserId}`;
+    return ctx.editMessageText(`❌ Регистрация пользователя ${name} отклонена.`);
+  }, 'deny_registration'));
 
   bot.hears(/.*/, safe(async (ctx, next) => {
     if (!await ensureRegistered(ctx)) return;
