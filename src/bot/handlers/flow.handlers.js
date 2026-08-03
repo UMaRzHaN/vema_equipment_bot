@@ -562,12 +562,17 @@ async function handleEditEquipment(ctx, text, flow) {
     if (field === 'components' && equipment.status !== STATUS.WITH_USER) {
       return ctx.reply('Комплектующие можно заполнять только когда оборудование у пользователя.');
     }
+    if (field === 'warehouse' && equipment.status !== STATUS.IN_STOCK) {
+      return ctx.reply('Склад можно редактировать только для оборудования со статусом «На складе». При ремонте значение склада очищается автоматически.');
+    }
 
     const promptSuffix = field === 'purchase_date'
       ? ' (ДД.ММ.ГГГГ)'
       : field === 'components'
         ? ' (через запятую)'
-        : '';
+        : field === 'warehouse'
+          ? ' («-» — очистить)'
+          : '';
     const promptMessage = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());
     ctx.session.flow = {
       type: FLOW_TYPE.EDIT_EQUIPMENT,
@@ -603,6 +608,17 @@ async function handleEditEquipment(ctx, text, flow) {
       return ctx.reply('Комплектующие можно заполнять только когда оборудование у пользователя.');
     }
     inputValue = parseComponentsInput(text);
+  }
+
+  if (field === 'warehouse') {
+    if (equipment.status !== STATUS.IN_STOCK) {
+      await updateEquipment(equipment.id, { warehouse: null });
+      await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
+      await safeDelete(ctx, flow.promptMessage, 'edit:prompt');
+      resetFlow(ctx);
+      return ctx.reply('Статус оборудования изменился. Поле склада очищено, так как оборудование не находится на складе.', mainMenu(ctx));
+    }
+    inputValue = normalizeOptionalValue(text);
   }
 
   const validation = validateEquipmentUpdate({ [field]: inputValue });

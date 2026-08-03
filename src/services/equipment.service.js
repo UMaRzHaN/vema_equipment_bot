@@ -108,7 +108,14 @@ async function addEquipment(data) {
 }
 
 async function updateEquipment(id, data) {
-  await updateEquipmentDetails({ id, ...data });
+  const current = await findEquipmentById(id);
+  const normalizedData = { ...data };
+
+  if (current && current.status !== STATUS.IN_STOCK) {
+    normalizedData.warehouse = null;
+  }
+
+  await updateEquipmentDetails({ id, ...normalizedData });
   if (data.category !== undefined) invalidateCategoriesCache();
   return findEquipmentById(id);
 }

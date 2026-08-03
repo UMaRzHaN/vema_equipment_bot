@@ -6,10 +6,21 @@ const assert = require('node:assert/strict');
 const {
   buildBrandListKeyboard,
   buildCategoryItemsKeyboard,
+  buildEditEquipmentKeyboard,
   buildMyEquipmentSelectionKeyboard,
   buildRoleSelectKeyboard,
   buildUserListKeyboard,
 } = require('../src/bot/views/menus');
+
+describe('buildEditEquipmentKeyboard', () => {
+  it('includes warehouse in editable fields', () => {
+    const markup = buildEditEquipmentKeyboard();
+    const keyboard = markup.reply_markup.keyboard;
+    const labels = keyboard.flat().map((button) => button.text || button);
+
+    assert.ok(labels.includes('Склад'));
+  });
+});
 
 describe('buildMyEquipmentSelectionKeyboard', () => {
   const items = [

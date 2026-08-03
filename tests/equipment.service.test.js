@@ -14,6 +14,7 @@ const state = {
   countEquipmentImpl: async () => 0,
   getDistinctBrandsByCategoryImpl: async () => [],
   getEquipmentByCategoryAndBrandImpl: async () => [],
+  detailCalls:        [],
 };
 
 const repoStub = {
@@ -27,12 +28,52 @@ const repoStub = {
   getEquipmentPage:      async (...args) => state.getEquipmentPageImpl(...args),
   getEquipmentByCategoryAndBrand: async (...args) => state.getEquipmentByCategoryAndBrandImpl(...args),
   countEquipment:        async (...args) => state.countEquipmentImpl(...args),
-  updateEquipmentDetails: async () => {},
+  updateEquipmentDetails: async (...args) => { state.detailCalls.push(args); },
   searchEquipment:       async () => [],
 };
 
 const service = proxyquire('../src/services/equipment.service', {
   '../repositories/equipment.repo': repoStub,
+});
+
+describe('updateEquipment', () => {
+  beforeEach(() => {
+    state.detailCalls = [];
+  });
+
+  it('updates warehouse for equipment in stock', async () => {
+    state.findResult = { id: 9, status: 'на складе', warehouse: 'Самарканд' };
+
+    await service.updateEquipment(9, { warehouse: 'Самарканд' });
+
+    assert.deepEqual(state.detailCalls[0][0], {
+      id: 9,
+      warehouse: 'Самарканд',
+    });
+  });
+
+  it('clears warehouse when equipment is in repair', async () => {
+    state.findResult = { id: 10, status: 'в ремонте', warehouse: 'Ташкент' };
+
+    await service.updateEquipment(10, { warehouse: 'Самарканд' });
+
+    assert.deepEqual(state.detailCalls[0][0], {
+      id: 10,
+      warehouse: null,
+    });
+  });
+
+  it('clears a stale warehouse during any edit while equipment is in repair', async () => {
+    state.findResult = { id: 11, status: 'в ремонте', warehouse: 'Ташкент' };
+
+    await service.updateEquipment(11, { model: 'Новая модель' });
+
+    assert.deepEqual(state.detailCalls[0][0], {
+      id: 11,
+      model: 'Новая модель',
+      warehouse: null,
+    });
+  });
 });
 
 // ── giveEquipmentToUser ───────────────────────────────────────────────────────

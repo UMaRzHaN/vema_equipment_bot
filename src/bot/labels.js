@@ -14,6 +14,7 @@ const LABELS = {
   editModel: 'Модель',
   editSerialNumber: 'Серийный номер',
   editPurchaseDate: 'Дата покупки',
+  editWarehouse: 'Склад',
   editNotes: 'Комплектующие',
   manageUsers: '👥 Пользователи',
   sharePhone: '📱 Поделиться номером',
@@ -28,6 +29,7 @@ const EDITABLE_FIELDS = {
   [LABELS.editModel]: 'model',
   [LABELS.editSerialNumber]: 'serial_number',
   [LABELS.editPurchaseDate]: 'purchase_date',
+  [LABELS.editWarehouse]: 'warehouse',
   [LABELS.editNotes]: 'components',
 };
 

@@ -179,7 +179,11 @@ async function updateEquipmentDetails(data) {
 
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
-      parts.push(`${key} = $${idx++}`);
+      if (key === 'warehouse') {
+        parts.push(`warehouse = CASE WHEN status = 'на складе' THEN $${idx++} ELSE NULL END`);
+      } else {
+        parts.push(`${key} = $${idx++}`);
+      }
       values.push(key === 'components' && data[key] != null ? JSON.stringify(data[key]) : data[key]);
     }
   }

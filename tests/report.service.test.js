@@ -40,7 +40,7 @@ class WorkbookStub {
 }
 
 describe('buildCategoryXlsx', () => {
-  it('keeps warehouse empty when equipment is with user', async () => {
+  async function buildReportRow(status, warehouse = 'Ташкент') {
     let workbookRef = null;
 
     const reportService = proxyquire('../src/services/report.service', {
@@ -83,15 +83,24 @@ describe('buildCategoryXlsx', () => {
         model: 'C5',
         serial_number: 'SN-1',
         components: [],
-        warehouse: 'Ташкент',
-        status: 'у пользователя',
+        warehouse,
+        status,
         current_holder_user_id: 42,
         current_issue_date: null,
         purchase_date: null,
       },
     ]);
 
-    const dataRow = workbookRef.worksheets[0].rows[1];
+    return workbookRef.worksheets[0].rows[1];
+  }
+
+  it('keeps warehouse empty when equipment is with user', async () => {
+    const dataRow = await buildReportRow('у пользователя');
+    assert.equal(dataRow.warehouse, '');
+  });
+
+  it('keeps warehouse empty when equipment is in repair', async () => {
+    const dataRow = await buildReportRow('в ремонте', 'Старое значение');
     assert.equal(dataRow.warehouse, '');
   });
 });
