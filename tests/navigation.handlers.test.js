@@ -267,4 +267,84 @@ describe('registerNavigationHandlers', () => {
     assert.match(answers[0], /удалён/i);
     assert.match(ctx.edited, /удалён из базы/i);
   });
+
+  it('lets a DB-role admin browse the user list without being an env admin', async () => {
+    // Real permission module, but with an empty ADMIN_IDS list: the only thing
+    // that can grant access here is the 'admin' role stored in the session.
+    const botConfig = proxyquire('../src/bot/config', {
+      '../config': { config: { bot: { adminIds: [] } } },
+    });
+
+    const pagesRequested = [];
+
+    const { registerNavigationHandlers } = proxyquire('../src/bot/handlers/navigation.handlers', {
+      '../labels': { LABELS: {} },
+      '../../utils/logger': { error: () => {} },
+      '../config': botConfig,
+      '../middlewares/error.handler': { safe: (fn) => fn },
+      '../utils': { ensureSession: () => {}, resetFlow: () => {} },
+      '../fsm/session.schema': { makeFlow: () => ({}) },
+      '../fsm/states': { FLOW_TYPE: {}, ADD_STEP: {} },
+      '../../services/equipment.service': {
+        listAllEquipment: async () => [],
+        listBrandsByCategory: async () => [],
+        listCategories: async () => [],
+        listEquipmentByCategory: async () => [],
+        listEquipmentByCategoryAndBrand: async () => [],
+      },
+      '../../services/report.service': {
+        buildSummaryText: async () => '',
+        buildCategoryXlsx: async () => Buffer.from(''),
+        createCategoryImage: async () => Buffer.from(''),
+      },
+      '../../services/user.service': {
+        assignUserRole: async () => {},
+        deleteUserAccount: async () => {},
+        getUserByTelegramId: async () => null,
+        isUserApproved: () => true,
+        isUserProfileComplete: () => true,
+        listAllUsersPaged: async ({ page }) => { pagesRequested.push(page); return { users: [], totalPages: 3 }; },
+        setUserApproved: async () => {},
+        setUserBanned: async () => {},
+      },
+      '../../services/notification.service': {
+        buildRegistrationApprovedMessage: () => 'approved',
+        buildRegistrationDeniedMessage: () => 'denied',
+      },
+      '../utils/profile.utils': {
+        startProfileRegistration: async () => {},
+        renderProfileCard: async () => {},
+      },
+      '../helpers/equipmentHints': { getEquipmentSuggestionText: async () => ({ text: '', options: {} }) },
+      '../views/menus': {
+        buildBrandListKeyboard: () => ({}),
+        buildCategoryExportKeyboard: () => ({}),
+        buildCategoryItemsKeyboard: () => ({}),
+        buildCategoryListKeyboard: () => ({}),
+        buildMyEquipmentKeyboard: () => ({}),
+        buildRoleSelectKeyboard: () => ({}),
+        buildUserListKeyboard: () => ({}),
+        mainMenu: () => ({}),
+      },
+    });
+
+    const bot = createBotStub();
+    registerNavigationHandlers(bot);
+
+    const entry = bot.handlers.action.find((item) => String(item.trigger) === '/users_page_(\\d+)/');
+    const answers = [];
+    const ctx = {
+      from: { id: 100 },
+      session: { userRole: 'admin' },
+      match: ['users_page_1', '1'],
+      answerCbQuery: async (text) => { answers.push(text); },
+      editMessageText: async (text) => { ctx.edited = text; },
+    };
+
+    await entry.handler(ctx);
+
+    assert.deepEqual(pagesRequested, [1]);
+    assert.deepEqual(answers, [undefined]);
+    assert.match(ctx.edited, /Пользователи/);
+  });
 });

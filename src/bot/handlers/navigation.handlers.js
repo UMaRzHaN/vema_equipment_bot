@@ -2,7 +2,7 @@
 
 const { LABELS } = require('../labels');
 const logger = require('../../utils/logger');
-const { isAdmin, isEffectiveAdmin } = require('../config');
+const { isEffectiveAdmin } = require('../config');
 const { safe } = require('../middlewares/error.handler');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
@@ -323,7 +323,7 @@ function registerNavigationHandlers(bot) {
   }, 'manageUsers'));
 
   bot.action(/users_page_(\d+)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
     await ctx.answerCbQuery();
     const page = Number(ctx.match[1]) || 0;
     const { users, totalPages } = await listAllUsersPaged({ page });
@@ -331,7 +331,7 @@ function registerNavigationHandlers(bot) {
   }, 'users_page'));
 
   bot.action(/set_role_select_(\d+)_(\d+)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
     await ctx.answerCbQuery();
     const telegramUserId = Number(ctx.match[1]);
     const page = Number(ctx.match[2]) || 0;
@@ -350,7 +350,7 @@ function registerNavigationHandlers(bot) {
   }, 'set_role_select'));
 
   bot.action(/set_role_(\d+)_(user|manager|admin)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
     await ctx.answerCbQuery();
     const telegramUserId = Number(ctx.match[1]);
     const newRole = ctx.match[2];
@@ -363,7 +363,7 @@ function registerNavigationHandlers(bot) {
   }, 'set_role'));
 
   bot.action(/toggle_ban_(\d+)_(0|1)_(\d+)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
 
     const telegramUserId = Number(ctx.match[1]);
     const shouldBan = ctx.match[2] === '1';
@@ -405,7 +405,7 @@ function registerNavigationHandlers(bot) {
   }, 'toggle_ban'));
 
   bot.action(/approve_registration_(\d+)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
 
     const telegramUserId = Number(ctx.match[1]);
     const user = await getUserByTelegramId(telegramUserId);
@@ -439,7 +439,7 @@ function registerNavigationHandlers(bot) {
   }, 'approve_registration'));
 
   bot.action(/deny_registration_(\d+)/, safe(async (ctx) => {
-    if (!isAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
+    if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
 
     const telegramUserId = Number(ctx.match[1]);
     const user = await getUserByTelegramId(telegramUserId);
