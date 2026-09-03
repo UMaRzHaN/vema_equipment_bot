@@ -15,6 +15,7 @@
     "overdue:user": "node scripts/notify-overdue-user.js",
     "notify:test": "node scripts/send-test-notification.js",
     "verify": "node scripts/verify-integrity.js",
+    "stats:reset": "node scripts/reset-stats.js",
     "setup-fonts": "node scripts/setup-fonts.js"
   },
   "keywords": [],
