@@ -78,10 +78,6 @@ async function ensureRegistered(ctx) {
     startProfileRegistration(ctx, 'Сначала заполните профиль.');
     return false;
   }
-  if (!isUserApproved(user)) {
-    await ctx.reply('Ваша регистрация ожидает подтверждения администратора.');
-    return false;
-  }
   return true;
 }
 

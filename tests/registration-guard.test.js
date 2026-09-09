@@ -69,24 +69,21 @@ describe('registrationGuard - profile complete', () => {
   });
 });
 
-describe('registrationGuard - waiting for approval', () => {
-  it('blocks access until admin approves registration', async () => {
+describe('registrationGuard - legacy pending approval', () => {
+  it('allows complete profiles without admin approval', async () => {
     const guard = loadGuard({
       user: { id: 99, first_name: 'Ivan', last_name: 'Petrov', phone: '+79001234567', is_approved: false },
       profileComplete: true,
     });
-    const replies = [];
     const ctx = makeCtx({
-      reply: async (text) => { replies.push(text); },
       session: { flow: { type: 'add_equipment' } },
     });
     let nextCalled = false;
 
     await guard(ctx, async () => { nextCalled = true; });
 
-    assert.equal(nextCalled, false);
-    assert.equal(ctx.session.flow, null);
-    assert.match(replies[0], /ожидает подтверждения/i);
+    assert.equal(nextCalled, true);
+    assert.deepEqual(ctx.session.flow, { type: 'add_equipment' });
   });
 });
 

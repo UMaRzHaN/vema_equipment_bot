@@ -1,22 +1,15 @@
 'use strict';
 
 const { Markup } = require('telegraf');
-const { config } = require('../../config');
 const { ensureSession, resetFlow } = require('../utils');
 const { makeFlow } = require('../fsm/session.schema');
 const { FLOW_TYPE } = require('../fsm/states');
 const {
   deleteUserAccount,
   saveUser,
-  getAllAdminTelegramIds,
   getUserByTelegramId,
   setUserApproved,
 } = require('../../services/user.service');
-const {
-  buildNewRegistrationMessage,
-  buildRegistrationApprovalReplyMarkup,
-} = require('../../services/notification.service');
-const logger = require('../../utils/logger');
 const { mainMenu } = require('../views/menus');
 const { renderProfileCard, startProfileRegistration } = require('../utils/profile.utils');
 const { safe } = require('../middlewares/error.handler');
@@ -48,35 +41,6 @@ function normalizePhone(input) {
 
 function isValidPhone(phone) {
   return phone.replace(/[^\d]/g, '').length >= 7;
-}
-
-async function notifyAdminsAboutRegistration(ctx, telegramUserId) {
-  try {
-    const adminIds = await getAllAdminTelegramIds(config.bot.adminIds);
-    if (!adminIds.length) {
-      logger.warn({ telegramUserId }, 'No admin recipients configured for registration approval');
-      return;
-    }
-
-    const user = await getUserByTelegramId(telegramUserId);
-    if (!user) {
-      logger.warn({ telegramUserId }, 'Cannot send registration approval request: user not found');
-      return;
-    }
-
-    const message = buildNewRegistrationMessage(user);
-    const replyMarkup = buildRegistrationApprovalReplyMarkup(telegramUserId);
-
-    await Promise.allSettled(
-      adminIds.map((adminId) => ctx.telegram.sendMessage(adminId, message, {
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-        reply_markup: replyMarkup,
-      })),
-    );
-  } catch (err) {
-    logger.error({ err: err.message, telegramUserId }, 'Failed to send new registration notification to admins');
-  }
 }
 
 function registerProfileHandlers(bot) {
@@ -169,11 +133,9 @@ function registerProfileHandlers(bot) {
         }
 
         await saveUser({ telegramId: ctx.from.id, firstName, lastName: text, phone });
-        await setUserApproved(ctx.from.id, false);
-        await notifyAdminsAboutRegistration(ctx, ctx.from.id);
+        await setUserApproved(ctx.from.id, true);
         resetFlow(ctx);
-        await ctx.reply('Данные отправлены администратору на подтверждение.', removeKeyboard());
-        return ctx.reply('Ожидайте подтверждения регистрации.');
+        return ctx.reply('✅ Регистрация завершена.', removeKeyboard());
       }
     }
 

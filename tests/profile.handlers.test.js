@@ -21,7 +21,7 @@ function createBotStub() {
 }
 
 describe('registerProfileHandlers', () => {
-  it('sends one admin notification after successful profile registration', async () => {
+  it('completes registration without admin approval', async () => {
     let savedPayload = null;
     const approvalCalls = [];
     const sentMessages = [];
@@ -97,14 +97,11 @@ describe('registerProfileHandlers', () => {
       lastName: 'Petrov',
       phone: '+1234567',
     });
-    assert.deepEqual(approvalCalls, [{ userId: 200, approved: false }]);
-    assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0].chatId, 100);
-    assert.equal(sentMessages[0].text, 'approve me');
+    assert.deepEqual(approvalCalls, [{ userId: 200, approved: true }]);
+    assert.equal(sentMessages.length, 0);
     assert.equal(ctx.session.flow, null);
-    assert.equal(replies.length, 2);
-    assert.match(replies[0], /администратору/i);
-    assert.match(replies[1], /ожидайте подтверждения/i);
+    assert.equal(replies.length, 1);
+    assert.match(replies[0], /регистрация завершена/i);
   });
 
   it('restores the main bottom menu from the profile screen', async () => {
