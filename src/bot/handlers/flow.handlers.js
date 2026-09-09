@@ -426,7 +426,6 @@ async function handleGiveProject(ctx, text, flow) {
     resetFlow(ctx);
     return ctx.reply('Выдача из корзины отменена.', mainMenu(ctx));
   }
-
   if (!text) return ctx.reply('Название проекта не может быть пустым. Введите название проекта:');
 
   const prompt = await ctx.reply('Введите страну проекта:', buildBackKeyboard());
@@ -449,7 +448,6 @@ async function handleGiveCountry(ctx, text, flow) {
     resetFlow(ctx);
     return ctx.reply('Выдача из корзины отменена.', mainMenu(ctx));
   }
-
   if (!text) return ctx.reply('Страна проекта не может быть пустой. Введите страну проекта:');
 
   const prompt = await ctx.reply('Введите общий срок для всей корзины в днях:', buildBackKeyboard());

@@ -482,6 +482,7 @@ async function finalizeGiveCart(ctx) {
           normalizeComponents(cartItem.components || []),
           cartItem.expectedReturnDate || null,
           cartItem.project || null,
+          cartItem.country || null,
         );
         equipmentActionsTotal.inc({ action: 'given' });
         issued.push(cartItem);

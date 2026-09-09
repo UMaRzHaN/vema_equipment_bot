@@ -7,7 +7,7 @@ const { z } = require('zod');
 // ─── Zod schema — single source of truth for all env vars ────────────────────
 const envSchema = z.object({
   // Telegram
-  BOT_TOKEN:      z.string().min(10, 'BOT_TOKEN is required'),
+  BOT_TOKEN:      z.string().min(10, 'BOT_TOKEN is required').optional(),
   WEBHOOK_URL:    z.preprocess((v) => v || undefined, z.string().url('WEBHOOK_URL must be a valid HTTPS URL').optional()),
   WEBHOOK_SECRET: z.string().min(8).default('webhook-secret-not-set'),
   ADMIN_IDS:      z.string().optional(),
@@ -21,7 +21,7 @@ const envSchema = z.object({
   POSTGRES_PORT:     z.coerce.number().int().default(5432),
   POSTGRES_DB:       z.string().min(1).default('vema_bot'),
   POSTGRES_USER:     z.string().min(1).default('vema'),
-  POSTGRES_PASSWORD: z.string().min(1, 'POSTGRES_PASSWORD is required'),
+  POSTGRES_PASSWORD: z.string().min(1, 'POSTGRES_PASSWORD is required').optional(),
 
   // Redis
   REDIS_HOST:     z.string().min(1).default('localhost'),
@@ -54,7 +54,7 @@ const config = {
   port: env.PORT,
 
   bot: {
-    token:         env.BOT_TOKEN,
+    token:         env.BOT_TOKEN || '',
     webhookUrl:    env.WEBHOOK_URL || '',
     webhookSecret: env.WEBHOOK_SECRET,
     adminIds:      env.ADMIN_IDS
@@ -67,7 +67,7 @@ const config = {
     port:                    env.POSTGRES_PORT,
     database:                env.POSTGRES_DB,
     user:                    env.POSTGRES_USER,
-    password:                env.POSTGRES_PASSWORD,
+    password:                 env.POSTGRES_PASSWORD || '',
     max:                     20,
     idleTimeoutMillis:       30_000,
     connectionTimeoutMillis: 5_000,
@@ -100,6 +100,12 @@ const config = {
  * Warns about non-fatal misconfigurations rather than throwing.
  */
 function assertConfig() {
+  if (!config.bot.token && config.nodeEnv === 'production') {
+    throw new Error('BOT_TOKEN is required in production mode');
+  }
+  if (!config.db.password && config.nodeEnv === 'production') {
+    throw new Error('POSTGRES_PASSWORD is required in production mode');
+  }
   if (!config.bot.webhookUrl && config.nodeEnv === 'production') {
     throw new Error('WEBHOOK_URL is required in production mode');
   }

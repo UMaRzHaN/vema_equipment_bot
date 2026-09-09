@@ -125,7 +125,14 @@ async function removeEquipment(id) {
   invalidateCategoriesCache();
 }
 
-async function giveEquipmentToUser(equipment, userId, components = [], expectedReturnDate = null, project = null) {
+async function giveEquipmentToUser(
+  equipment,
+  userId,
+  components = [],
+  expectedReturnDate = null,
+  project = null,
+  country = null,
+) {
   try {
     await atomicStatusChange(
       {
@@ -137,6 +144,7 @@ async function giveEquipmentToUser(equipment, userId, components = [], expectedR
         warehouse: null,
         components,
         project,
+        country,
       },
       {
         equipment_id: equipment.id,
