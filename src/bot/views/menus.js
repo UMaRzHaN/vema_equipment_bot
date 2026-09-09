@@ -69,7 +69,8 @@ function buildEditEquipmentKeyboard() {
   return Markup.keyboard([
     [LABELS.editCategory, LABELS.editBrand, LABELS.editModel],
     [LABELS.editSerialNumber, LABELS.editPurchaseDate],
-    [LABELS.editWarehouse, LABELS.editNotes],
+    [LABELS.editWarehouse, LABELS.editProject],
+    [LABELS.editCity, LABELS.editNotes],
     [LABELS.back],
   ]).resize();
 }
