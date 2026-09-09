@@ -481,6 +481,8 @@ async function finalizeGiveCart(ctx) {
           ctx.from.id,
           normalizeComponents(cartItem.components || []),
           cartItem.expectedReturnDate || null,
+          cartItem.project || null,
+          cartItem.country || null,
         );
         equipmentActionsTotal.inc({ action: 'given' });
         issued.push(cartItem);
@@ -889,24 +891,19 @@ function registerEquipmentHandlers(bot) {
       return;
     }
 
-    const hasCommonDuration = cart.items.every((item) => item.durationDays && item.expectedReturnDate);
-    if (!hasCommonDuration) {
-      await ctx.answerCbQuery();
-      const prompt = await ctx.reply('Введите общий срок для всей корзины в днях:', buildBackKeyboard());
-      ctx.session.flow = makeFlow(
-        FLOW_TYPE.GIVE_DURATION,
-        1,
-        {},
-        {
-          cartMode: true,
-          promptMessage: rememberMessage(prompt),
-          sourceMessage: rememberMessage(ctx.callbackQuery?.message),
-        },
-      );
-      return prompt;
-    }
-
-    return finalizeGiveCart(ctx);
+    await ctx.answerCbQuery();
+    const prompt = await ctx.reply('Введите название проекта:', buildBackKeyboard());
+    ctx.session.flow = makeFlow(
+      FLOW_TYPE.GIVE_PROJECT,
+      1,
+      {},
+      {
+        cartMode: true,
+        promptMessage: rememberMessage(prompt),
+        sourceMessage: rememberMessage(ctx.callbackQuery?.message),
+      },
+    );
+    return prompt;
   }, 'confirmGiveCart'));
 
   bot.action(ACTIONS_REGEX.RETURN, safe(async (ctx) => {
@@ -1168,5 +1165,3 @@ module.exports = {
   renderGiveSelectionText,
   updateGiveSelectionMessage,
 };
-
-

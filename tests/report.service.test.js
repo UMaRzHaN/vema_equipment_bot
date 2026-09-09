@@ -83,6 +83,8 @@ describe('buildCategoryXlsx', () => {
         model: 'C5',
         serial_number: 'SN-1',
         components: [],
+        project: 'Проект А',
+        country: 'Узбекистан',
         warehouse,
         status,
         current_holder_user_id: 42,
@@ -102,5 +104,11 @@ describe('buildCategoryXlsx', () => {
   it('keeps warehouse empty when equipment is in repair', async () => {
     const dataRow = await buildReportRow('в ремонте', 'Старое значение');
     assert.equal(dataRow.warehouse, '');
+  });
+
+  it('includes project and country in the Excel row', async () => {
+    const dataRow = await buildReportRow('у пользователя');
+    assert.equal(dataRow.project, 'Проект А');
+    assert.equal(dataRow.country, 'Узбекистан');
   });
 });

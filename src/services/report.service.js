@@ -230,6 +230,8 @@ async function buildCategoryXlsx(categoryName, items) {
     { header: 'Бренд', key: 'brand', width: 24 },
     { header: 'Модель', key: 'model', width: 20 },
     { header: 'Комплектующие', key: 'components', width: 34 },
+    { header: 'Проект', key: 'project', width: 18 },
+    { header: 'Страна', key: 'country', width: 16 },
     { header: 'Склад', key: 'warehouse', width: 18 },
     { header: 'Серийный номер', key: 'serial_number', width: 20 },
     { header: 'Дата покупки', key: 'purchase_date', width: 18 },
@@ -245,7 +247,7 @@ async function buildCategoryXlsx(categoryName, items) {
 
   for (const [brand, brandItems] of groupByBrand(items)) {
     const brandRow = sheet.addRow({ category: `Бренд: ${brand}` });
-    sheet.mergeCells(`A${brandRow.number}:M${brandRow.number}`);
+    sheet.mergeCells(`A${brandRow.number}:O${brandRow.number}`);
     brandRow.font = { bold: true };
     brandRow.fill = {
       type: 'pattern',
@@ -266,6 +268,8 @@ async function buildCategoryXlsx(categoryName, items) {
         brand: item.brand || '',
         model: item.model || '',
         components: componentsText === '-' ? '' : componentsText,
+        project: item.project || '',
+        country: item.country || '',
         serial_number: item.serial_number || '',
         warehouse,
         purchase_date: formatDateOnly(item.purchase_date),

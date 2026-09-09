@@ -4,6 +4,8 @@ const FLOW_TYPE = Object.freeze({
   IDLE: null,
   ADD_EQUIPMENT: 'add_equipment',
   EDIT_EQUIPMENT: 'edit_equipment',
+  GIVE_PROJECT: 'give_project',
+  GIVE_COUNTRY: 'give_country',
   GIVE_DURATION: 'give_duration',
   GIVE_COMPONENTS: 'give_components',
   REPAIR: 'repair',

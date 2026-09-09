@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS equipment (
   current_issue_date       TIMESTAMPTZ,
   expected_return_date     TIMESTAMPTZ,
   components               JSONB NOT NULL DEFAULT '[]'::jsonb,
+  project                  TEXT,
+  country                  TEXT,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
