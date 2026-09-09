@@ -115,6 +115,11 @@ async function updateEquipment(id, data) {
     normalizedData.warehouse = null;
   }
 
+  if (current && current.status !== STATUS.WITH_USER) {
+    normalizedData.project = null;
+    normalizedData.country = null;
+  }
+
   await updateEquipmentDetails({ id, ...normalizedData });
   if (data.category !== undefined) invalidateCategoriesCache();
   return findEquipmentById(id);
@@ -211,6 +216,8 @@ async function returnEquipmentFromUser(equipment, userId, warehouse) {
         expected_return_date: null,
         warehouse: warehouse || 'Ташкент',
         components: [],
+        project: null,
+        country: null,
       },
       {
         equipment_id: equipment.id,
@@ -243,6 +250,8 @@ async function startRepair(equipment, performedByUserId, comment) {
         current_issue_date: null,
         expected_return_date: null,
         warehouse: null,
+        project: null,
+        country: null,
       },
       {
         equipment_id: equipment.id,
@@ -270,6 +279,8 @@ async function completeRepair(equipment, performedByUserId) {
         current_issue_date: null,
         expected_return_date: null,
         warehouse: equipment.warehouse || 'Ташкент',
+        project: null,
+        country: null,
       },
       {
         equipment_id: equipment.id,
@@ -295,6 +306,8 @@ async function writeOffEquipment(equipment, performedByUserId, comment) {
         current_issue_date: null,
         expected_return_date: null,
         warehouse: null,
+        project: null,
+        country: null,
       },
       {
         equipment_id: equipment.id,

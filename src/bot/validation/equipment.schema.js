@@ -25,6 +25,8 @@ const equipmentCreateSchema = z.object({
 
 const equipmentUpdateSchema = equipmentCreateSchema.partial().extend({
   warehouse: z.string().max(100).optional().nullable(),
+  project: z.string().max(100).optional().nullable(),
+  country: z.string().max(100).optional().nullable(),
 });
 
 function validateEquipmentCreate(data) {

@@ -172,7 +172,7 @@ async function updateEquipmentStatus(data) {
 }
 
 async function updateEquipmentDetails(data) {
-  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'components', 'warehouse'];
+  const allowed = ['category', 'brand', 'model', 'serial_number', 'purchase_date', 'components', 'warehouse', 'project', 'country'];
   const parts = [];
   const values = [];
   let idx = 1;
@@ -181,6 +181,8 @@ async function updateEquipmentDetails(data) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       if (key === 'warehouse') {
         parts.push(`warehouse = CASE WHEN status = 'на складе' THEN $${idx++} ELSE NULL END`);
+      } else if (key === 'project' || key === 'country') {
+        parts.push(`${key} = CASE WHEN status = 'у пользователя' THEN $${idx++} ELSE NULL END`);
       } else {
         parts.push(`${key} = $${idx++}`);
       }

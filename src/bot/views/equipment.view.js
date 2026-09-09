@@ -78,12 +78,18 @@ async function renderEquipmentCard(item) {
   const warehouseLine = item.status === STATUS.IN_STOCK && item.warehouse
     ? `Город/склад: ${item.warehouse}\n`
     : '';
+  const projectLine = item.status === STATUS.WITH_USER && item.project
+    ? `Проект: ${item.project}\n`
+    : '';
+  const countryLine = item.status === STATUS.WITH_USER && item.country
+    ? `Город: ${item.country}\n`
+    : '';
 
   return `#${item.position || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}
 
 Статус: ${statusLabel(item.status)}
 ${warehouseLine}${componentsLine}Пользователь: ${user}
-
+${projectLine}${countryLine}
 Дата выдачи: ${formatDate(item.current_issue_date)}
 Дата сдачи: ${formatDate(timeline.lastReturnDate)}
 Дата ремонта: ${formatDate(timeline.lastRepairDate)}

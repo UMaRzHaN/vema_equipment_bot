@@ -49,6 +49,8 @@ describe('updateEquipment', () => {
     assert.deepEqual(state.detailCalls[0][0], {
       id: 9,
       warehouse: 'Самарканд',
+      project: null,
+      country: null,
     });
   });
 
@@ -60,6 +62,8 @@ describe('updateEquipment', () => {
     assert.deepEqual(state.detailCalls[0][0], {
       id: 10,
       warehouse: null,
+      project: null,
+      country: null,
     });
   });
 
@@ -72,6 +76,8 @@ describe('updateEquipment', () => {
       id: 11,
       model: 'Новая модель',
       warehouse: null,
+      project: null,
+      country: null,
     });
   });
 });
@@ -124,6 +130,19 @@ describe('returnEquipmentFromUser', () => {
     assert.equal(equipUpdate.current_holder_user_id, null);
   });
 
+  it('clears project and country on return to warehouse', async () => {
+    await service.returnEquipmentFromUser(
+      { id: 2, status: 'у пользователя', current_holder_user_id: 7, project: 'VEMA-1', country: 'Астана' },
+      7,
+      'Ташкент',
+    );
+    const [equipUpdate] = state.atomicCalls[0];
+    assert.equal(equipUpdate.project, null);
+    assert.equal(equipUpdate.country, null);
+    assert.equal(equipUpdate.warehouse, 'Ташкент');
+    assert.deepEqual(equipUpdate.components, []);
+  });
+
   it('writes correct history payload for return', async () => {
     await service.returnEquipmentFromUser({ id: 2, status: 'у пользователя', current_holder_user_id: 7 }, 7, 'Ташкент');
     const [, historyEntry] = state.atomicCalls[0];
@@ -148,6 +167,8 @@ describe('non-stock status transitions', () => {
     const [equipUpdate] = state.atomicCalls[0];
     assert.equal(equipUpdate.status, 'в ремонте');
     assert.equal(equipUpdate.warehouse, null);
+    assert.equal(equipUpdate.project, null);
+    assert.equal(equipUpdate.country, null);
   });
 
   it('writes correct history payload for repair start', async () => {

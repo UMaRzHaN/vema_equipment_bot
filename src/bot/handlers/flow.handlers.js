@@ -611,12 +611,15 @@ async function handleEditEquipment(ctx, text, flow) {
     if (field === 'warehouse' && equipment.status !== STATUS.IN_STOCK) {
       return ctx.reply('Склад можно редактировать только для оборудования со статусом «На складе». При ремонте значение склада очищается автоматически.');
     }
+    if ((field === 'project' || field === 'country') && equipment.status !== STATUS.WITH_USER) {
+      return ctx.reply('Проект и город можно редактировать только когда оборудование у пользователя. При возврате на склад эти поля очищаются автоматически.');
+    }
 
     const promptSuffix = field === 'purchase_date'
       ? ' (ДД.ММ.ГГГГ)'
       : field === 'components'
         ? ' (через запятую)'
-        : field === 'warehouse'
+        : field === 'warehouse' || field === 'project' || field === 'country'
           ? ' («-» — очистить)'
           : '';
     const promptMessage = await ctx.reply(`Введите новое значение для ${text}${promptSuffix}:`, buildBackKeyboard());
@@ -663,6 +666,17 @@ async function handleEditEquipment(ctx, text, flow) {
       await safeDelete(ctx, flow.promptMessage, 'edit:prompt');
       resetFlow(ctx);
       return ctx.reply('Статус оборудования изменился. Поле склада очищено, так как оборудование не находится на складе.', mainMenu(ctx));
+    }
+    inputValue = normalizeOptionalValue(text);
+  }
+
+  if (field === 'project' || field === 'country') {
+    if (equipment.status !== STATUS.WITH_USER) {
+      await updateEquipment(equipment.id, { project: null, country: null });
+      await safeDelete(ctx, flow.selectorMessage, 'edit:selector');
+      await safeDelete(ctx, flow.promptMessage, 'edit:prompt');
+      resetFlow(ctx);
+      return ctx.reply('Статус оборудования изменился. Поля проекта и города очищены, так как оборудование не у пользователя.', mainMenu(ctx));
     }
     inputValue = normalizeOptionalValue(text);
   }
