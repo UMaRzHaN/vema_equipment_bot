@@ -14,7 +14,7 @@ const LABELS = {
   editModel: 'Модель',
   editSerialNumber: 'Серийный номер',
   editPurchaseDate: 'Дата покупки',
-  editWarehouse: 'Склад',
+  editWarehouse: 'Город/склад',
   editNotes: 'Комплектующие',
   manageUsers: '👥 Пользователи',
   sharePhone: '📱 Поделиться номером',

@@ -76,7 +76,7 @@ async function renderEquipmentCard(item) {
     ? `Комплектующие: ${components.map(formatComponent).join(', ')}\n`
     : '';
   const warehouseLine = item.status === STATUS.IN_STOCK && item.warehouse
-    ? `Склад: ${item.warehouse}\n`
+    ? `Город/склад: ${item.warehouse}\n`
     : '';
 
   return `#${item.position || '-'} ${item.category || '-'} ${item.model || '-'} - ${item.serial_number || '-'}

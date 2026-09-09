@@ -60,6 +60,8 @@ const MIGRATIONS = [
         const VALID_FLOW_TYPES = new Set([
           'add_equipment',
           'edit_equipment',
+          'give_project',
+          'give_country',
           'give_duration',
           'give_components',
           'repair',

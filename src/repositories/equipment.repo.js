@@ -251,6 +251,11 @@ async function atomicStatusChange(statusData, historyData) {
       values.push(JSON.stringify(statusData.components || []));
     }
 
+    if (Object.prototype.hasOwnProperty.call(statusData, 'project')) {
+      setParts.push(`project = $${nextIndex++}`);
+      values.push(statusData.project ?? null);
+    }
+
     const updateResult = await client.query(
       `UPDATE equipment
        SET ${setParts.join(', ')},

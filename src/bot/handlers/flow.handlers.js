@@ -348,6 +348,8 @@ async function handleGiveDuration(ctx, text, flow) {
     expectedReturnDate.setDate(expectedReturnDate.getDate() + durationDays);
     ctx.session.giveCart.items = ctx.session.giveCart.items.map((item) => ({
       ...item,
+      project: flow.data?.project || null,
+      country: flow.data?.country || null,
       durationDays,
       expectedReturnDate: expectedReturnDate.toISOString(),
     }));
@@ -416,6 +418,52 @@ async function handleGiveDuration(ctx, text, flow) {
   );
 
   return selectionMessage;
+}
+
+async function handleGiveProject(ctx, text, flow) {
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'give:projectPrompt');
+    resetFlow(ctx);
+    return ctx.reply('Выдача из корзины отменена.', mainMenu(ctx));
+  }
+
+  if (!text) return ctx.reply('Название проекта не может быть пустым. Введите название проекта:');
+
+  const prompt = await ctx.reply('Введите страну проекта:', buildBackKeyboard());
+  ctx.session.flow = makeFlow(
+    FLOW_TYPE.GIVE_COUNTRY,
+    1,
+    { project: text },
+    {
+      cartMode: true,
+      promptMessage: rememberMessage(prompt),
+      sourceMessage: flow.sourceMessage,
+    },
+  );
+  return prompt;
+}
+
+async function handleGiveCountry(ctx, text, flow) {
+  if (text === LABELS.back) {
+    await safeDelete(ctx, flow.promptMessage, 'give:countryPrompt');
+    resetFlow(ctx);
+    return ctx.reply('Выдача из корзины отменена.', mainMenu(ctx));
+  }
+
+  if (!text) return ctx.reply('Страна проекта не может быть пустой. Введите страну проекта:');
+
+  const prompt = await ctx.reply('Введите общий срок для всей корзины в днях:', buildBackKeyboard());
+  ctx.session.flow = makeFlow(
+    FLOW_TYPE.GIVE_DURATION,
+    1,
+    { project: flow.data?.project || null, country: text },
+    {
+      cartMode: true,
+      promptMessage: rememberMessage(prompt),
+      sourceMessage: flow.sourceMessage,
+    },
+  );
+  return prompt;
 }
 
 async function handleReturnLocation(ctx, text, flow) {
@@ -692,6 +740,10 @@ function registerFlowHandlers(bot) {
     switch (flow.type) {
       case FLOW_TYPE.ADD_EQUIPMENT:
         return handleAddEquipment(ctx, text, flow);
+      case FLOW_TYPE.GIVE_PROJECT:
+        return handleGiveProject(ctx, text, flow);
+      case FLOW_TYPE.GIVE_COUNTRY:
+        return handleGiveCountry(ctx, text, flow);
       case FLOW_TYPE.GIVE_DURATION:
         return handleGiveDuration(ctx, text, flow);
       case FLOW_TYPE.GIVE_COMPONENTS:
