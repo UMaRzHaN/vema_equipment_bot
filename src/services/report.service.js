@@ -230,7 +230,7 @@ async function buildCategoryXlsx(categoryName, items) {
     { header: 'Бренд', key: 'brand', width: 24 },
     { header: 'Модель', key: 'model', width: 20 },
     { header: 'Комплектующие', key: 'components', width: 34 },
-    { header: 'Город/склад', key: 'warehouse', width: 18 },
+    { header: 'Город', key: 'warehouse', width: 18 },
     { header: 'Проект', key: 'project', width: 18 },
     { header: 'Страна', key: 'country', width: 16 },
     { header: 'Склад', key: 'warehouse', width: 18 },
