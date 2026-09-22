@@ -64,6 +64,14 @@ function findSystemFontPath() {
     }
   }
 
+  if (process.platform === 'darwin') {
+    candidates.push(
+      '/System/Library/Fonts/Supplemental/Arial.ttf',
+      '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+      '/Library/Fonts/Arial.ttf',
+    );
+  }
+
   candidates.push(
     '/usr/share/fonts/dejavu/DejaVuSans.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
@@ -97,6 +105,9 @@ function getReportFont() {
     const font = PImage.registerFont(fontPath, 'ReportFont');
     font.loadSync();
     resolve(font);
+  }).catch((err) => {
+    reportFontPromise = null;
+    throw err;
   });
 
   return reportFontPromise;
