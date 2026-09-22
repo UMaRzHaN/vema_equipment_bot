@@ -215,6 +215,13 @@ function getGiveComponentsPreset(item) {
   };
 }
 
+const CATEGORIES_WITHOUT_COMPONENTS = ["газоанализ"];
+
+function requiresGiveComponents(item) {
+  const category = normalizeKey(item?.category);
+  return !CATEGORIES_WITHOUT_COMPONENTS.some((key) => category.includes(key));
+}
+
 function buildPresetComponents(entries = []) {
   return normalizePresetEntries(entries);
 }
@@ -230,4 +237,5 @@ module.exports = {
   detectCategoryKey,
   getGiveComponentsPreset,
   isQuantityComponent,
+  requiresGiveComponents,
 };

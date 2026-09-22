@@ -3,7 +3,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getGiveComponentsPreset } = require('../src/utils/component-presets');
+const { getGiveComponentsPreset, requiresGiveComponents } = require('../src/utils/component-presets');
 
 describe('getGiveComponentsPreset', () => {
   it('applies sampler preset by model name', () => {
@@ -45,5 +45,17 @@ describe('getGiveComponentsPreset', () => {
     assert.match(preset.single.join(' | '), /Анемометр/);
     assert.doesNotMatch(preset.single.join(' | '), /Воронка/);
     assert.doesNotMatch(preset.single.join(' | '), /Конус/);
+  });
+});
+
+describe('requiresGiveComponents', () => {
+  it('skips components step for gas analyzers', () => {
+    assert.equal(requiresGiveComponents({ category: 'Газоанализатор' }), false);
+    assert.equal(requiresGiveComponents({ category: 'газоанализаторы' }), false);
+  });
+
+  it('keeps components step for other categories', () => {
+    assert.equal(requiresGiveComponents({ category: 'Камера' }), true);
+    assert.equal(requiresGiveComponents({}), true);
   });
 });

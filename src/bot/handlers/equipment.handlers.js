@@ -36,7 +36,7 @@ const {
 } = require('../../services/equipment.service');
 const { equipmentActionsTotal } = require('../../utils/metrics');
 const { formatComponent, normalizeComponents } = require('../../utils/components');
-const { buildPresetComponents, getGiveComponentsPreset, isQuantityComponent } = require('../../utils/component-presets');
+const { buildPresetComponents, getGiveComponentsPreset, isQuantityComponent, requiresGiveComponents } = require('../../utils/component-presets');
 
 function rememberMessage(message) {
   if (!message) return null;
@@ -559,16 +559,26 @@ function registerEquipmentHandlers(bot) {
   }, 'history'));
 
   bot.action(ACTIONS_REGEX.GIVE, safe(async (ctx) => {
-    await ctx.answerCbQuery();
     const id = parseId(ctx.match[1]);
-    if (!id) return ctx.reply(LABELS.ERR_INVALID_ID);
+    if (!id) {
+      await ctx.answerCbQuery();
+      return ctx.reply(LABELS.ERR_INVALID_ID);
+    }
 
     const item = await findEquipmentById(id);
-    if (!item) return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
+    if (!item) {
+      await ctx.answerCbQuery();
+      return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
+    }
     if (item.status !== STATUS.IN_STOCK) {
       return ctx.answerCbQuery('Оборудование недоступно для выдачи.', { show_alert: true });
     }
 
+    if (!requiresGiveComponents(item)) {
+      return addCurrentItemToGiveCart(ctx, id);
+    }
+
+    await ctx.answerCbQuery();
     ensureSession(ctx);
     const preset = getGiveComponentsPreset(item);
     const selectionMessage = await ctx.reply(
