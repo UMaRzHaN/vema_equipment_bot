@@ -291,8 +291,9 @@ function registerNavigationHandlers(bot) {
   bot.action(/excelCategory_(.+)/, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     await ctx.answerCbQuery('Генерирую Excel...');
-    let categoryName;
-    try { categoryName = decodeURIComponent(ctx.match[1]); } catch { categoryName = ctx.match[1]; }
+    const key = ctx.match[1];
+    const categories = await listCategories();
+    const categoryName = categories.includes(key) ? key : categories.find((name) => name.startsWith(key)) || key;
     const items = await listEquipmentByCategory(categoryName);
     if (!items.length) return ctx.reply(`Нет оборудования в категории ${categoryName}`);
     const buffer = await buildCategoryXlsx(categoryName, items);

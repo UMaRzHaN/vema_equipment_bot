@@ -154,9 +154,20 @@ function buildCategoryItemsKeyboard(items, page = 0, options = {}) {
   return Markup.inlineKeyboard(rows);
 }
 
+const CALLBACK_DATA_MAX_BYTES = 64;
+const EXCEL_CATEGORY_PREFIX = 'excelCategory_';
+
+// Telegram limits callback_data to 64 bytes; long names are cut and resolved by prefix in the handler.
+function buildCategoryExportCallback(categoryName) {
+  const maxBytes = CALLBACK_DATA_MAX_BYTES - Buffer.byteLength(EXCEL_CATEGORY_PREFIX);
+  let key = String(categoryName);
+  while (Buffer.byteLength(key) > maxBytes) key = key.slice(0, -1);
+  return `${EXCEL_CATEGORY_PREFIX}${key}`;
+}
+
 function buildCategoryExportKeyboard(categoryName) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('📄 Экспорт в Excel', `excelCategory_${encodeURIComponent(categoryName)}`)],
+    [Markup.button.callback('📄 Экспорт в Excel', buildCategoryExportCallback(categoryName))],
   ]);
 }
 
@@ -278,6 +289,7 @@ module.exports = {
   buildCategoryItemsKeyboard,
   buildCategoryListKeyboard,
   buildEditEquipmentKeyboard,
+  buildCategoryExportCallback,
   buildGiveComponentsKeyboard,
   buildLocationRequestKeyboard,
   buildMyEquipmentKeyboard,

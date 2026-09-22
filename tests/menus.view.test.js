@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildBrandListKeyboard,
+  buildCategoryExportCallback,
   buildCategoryItemsKeyboard,
   buildEditEquipmentKeyboard,
   buildMyEquipmentSelectionKeyboard,
@@ -140,5 +141,17 @@ describe('user admin keyboards', () => {
 
     assert.equal(inline[1][0].callback_data, 'approve_registration_123');
     assert.equal(inline[1][1].callback_data, 'deny_registration_123');
+  });
+});
+
+describe('buildCategoryExportCallback', () => {
+  it('keeps short cyrillic category names intact', () => {
+    assert.equal(buildCategoryExportCallback('Газоанализатор'), 'excelCategory_Газоанализатор');
+  });
+
+  it('fits long names into the 64-byte Telegram limit', () => {
+    const data = buildCategoryExportCallback('Очень длинное название категории оборудования');
+    assert.ok(Buffer.byteLength(data) <= 64);
+    assert.ok(data.startsWith('excelCategory_Очень'));
   });
 });
