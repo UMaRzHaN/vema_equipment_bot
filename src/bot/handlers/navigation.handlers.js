@@ -480,6 +480,7 @@ function registerNavigationHandlers(bot) {
       LABELS.back, LABELS.previousPage, LABELS.nextPage,
       LABELS.categories, LABELS.myEquipment, LABELS.summary,
       LABELS.addEquipment, LABELS.profile, LABELS.manageUsers,
+      LABELS.categoryKits,
     ];
     if (menuTexts.includes(text)) return next();
 

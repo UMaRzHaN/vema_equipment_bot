@@ -13,6 +13,7 @@ const FLOW_TYPE = Object.freeze({
   EDIT_PROFILE: 'edit_profile',
   ASSIGN_ROLE: 'assign_role',
   RETURN_LOCATION: 'return_location',
+  EDIT_CATEGORY_KIT: 'edit_category_kit',
 });
 
 const ADD_STEP = Object.freeze({

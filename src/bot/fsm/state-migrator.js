@@ -69,6 +69,7 @@ const MIGRATIONS = [
           'edit_profile',
           'assign_role',
           'return_location',
+          'edit_category_kit',
         ]);
 
         if (migrated.flow.type && !VALID_FLOW_TYPES.has(migrated.flow.type)) {

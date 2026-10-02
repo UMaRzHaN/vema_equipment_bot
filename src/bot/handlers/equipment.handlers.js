@@ -36,7 +36,8 @@ const {
 } = require('../../services/equipment.service');
 const { equipmentActionsTotal } = require('../../utils/metrics');
 const { formatComponent, normalizeComponents } = require('../../utils/components');
-const { buildPresetComponents, getGiveComponentsPreset, isQuantityComponent, requiresGiveComponents } = require('../../utils/component-presets');
+const { buildPresetComponents, isQuantityComponent } = require('../../utils/component-presets');
+const { getItemKit } = require('../../services/category-kit.service');
 
 function rememberMessage(message) {
   if (!message) return null;
@@ -382,7 +383,7 @@ async function canManageEquipment(ctx) {
 
 async function updateGiveSelectionMessage(ctx, item, flow) {
   const selectedComponents = normalizeComponents(flow?.data?.components || []);
-  const preset = flow?.data?.preset || getGiveComponentsPreset(item);
+  const preset = flow?.data?.preset || (await getItemKit(item)).preset;
   const text = renderGiveSelectionText(
     item,
     selectedComponents,
@@ -574,13 +575,14 @@ function registerEquipmentHandlers(bot) {
       return ctx.answerCbQuery('Оборудование недоступно для выдачи.', { show_alert: true });
     }
 
-    if (!requiresGiveComponents(item)) {
+    const kit = await getItemKit(item);
+    if (!kit.enabled) {
       return addCurrentItemToGiveCart(ctx, id);
     }
 
     await ctx.answerCbQuery();
     ensureSession(ctx);
-    const preset = getGiveComponentsPreset(item);
+    const preset = kit.preset;
     const selectionMessage = await ctx.reply(
       renderGiveSelectionText(item, [], null, null),
       buildGiveComponentsKeyboard(item.id, preset, []),
@@ -624,7 +626,7 @@ function registerEquipmentHandlers(bot) {
       return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
     }
 
-    const preset = flow.data?.preset || getGiveComponentsPreset(item);
+    const preset = flow.data?.preset || (await getItemKit(item)).preset;
     ctx.session.flow = makeFlow(
       FLOW_TYPE.GIVE_COMPONENTS,
       1,
@@ -655,7 +657,7 @@ function registerEquipmentHandlers(bot) {
       return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
     }
 
-    const preset = flow.data?.preset || getGiveComponentsPreset(item);
+    const preset = flow.data?.preset || (await getItemKit(item)).preset;
     const componentName = resolveComponentName(preset, componentKey);
     if (!componentName) {
       return ctx.answerCbQuery('Не удалось определить комплектующее.', { show_alert: true });
@@ -690,7 +692,7 @@ function registerEquipmentHandlers(bot) {
       return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
     }
 
-    const preset = flow.data?.preset || getGiveComponentsPreset(item);
+    const preset = flow.data?.preset || (await getItemKit(item)).preset;
     const componentName = resolveComponentName(preset, componentKey);
     if (!componentName) {
       return ctx.answerCbQuery('Не удалось определить комплектующее.', { show_alert: true });
@@ -729,7 +731,7 @@ function registerEquipmentHandlers(bot) {
       return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
     }
 
-    const preset = flow.data?.preset || getGiveComponentsPreset(item);
+    const preset = flow.data?.preset || (await getItemKit(item)).preset;
     const componentName = resolveComponentName(preset, componentKey);
     if (!componentName) {
       return ctx.answerCbQuery('Не удалось определить комплектующее.', { show_alert: true });
@@ -767,7 +769,7 @@ function registerEquipmentHandlers(bot) {
       return ctx.editMessageText(LABELS.ERR_NOT_FOUND);
     }
 
-    const preset = flow.data?.preset || getGiveComponentsPreset(item);
+    const preset = flow.data?.preset || (await getItemKit(item)).preset;
     ctx.session.flow = makeFlow(
       FLOW_TYPE.GIVE_COMPONENTS,
       1,
@@ -803,7 +805,7 @@ function registerEquipmentHandlers(bot) {
       2,
       {
         components,
-        preset: flow.data?.preset || getGiveComponentsPreset(item),
+        preset: flow.data?.preset || (await getItemKit(item)).preset,
         durationDays: flow.data?.durationDays || null,
         expectedReturnDate: flow.data?.expectedReturnDate || null,
       },
@@ -843,7 +845,7 @@ function registerEquipmentHandlers(bot) {
       1,
       {
         components: normalizeComponents(flow.data?.components || []),
-        preset: flow.data?.preset || getGiveComponentsPreset(item),
+        preset: flow.data?.preset || (await getItemKit(item)).preset,
         durationDays: flow.data?.durationDays || null,
         expectedReturnDate: flow.data?.expectedReturnDate || null,
       },

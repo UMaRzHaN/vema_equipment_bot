@@ -14,6 +14,7 @@ const { registerNavigationHandlers } = require('./handlers/navigation.handlers')
 const { registerProfileHandlers } = require('./handlers/profile.handlers');
 const { registerFlowHandlers } = require('./handlers/flow.handlers');
 const { registerEquipmentHandlers } = require('./handlers/equipment.handlers');
+const { registerCategoryKitHandlers } = require('./handlers/category-kit.handlers');
 
 function createBot() {
   const bot = new Telegraf(config.bot.token);
@@ -35,6 +36,7 @@ function createBot() {
   registerProfileHandlers(bot);
   registerFlowHandlers(bot);
   registerEquipmentHandlers(bot);
+  registerCategoryKitHandlers(bot);
 
   // Global error handler
   bot.catch(async (err, ctx) => {

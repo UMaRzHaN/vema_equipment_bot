@@ -19,6 +19,7 @@ const LABELS = {
   editCity: 'Город',
   editNotes: 'Комплектующие',
   manageUsers: '👥 Пользователи',
+  categoryKits: '🧰 Комплекты',
   sharePhone: '📱 Поделиться номером',
   editProfileInline: '✏️ Редактировать профиль',
   fillProfileInline: '📝 Заполнить профиль',

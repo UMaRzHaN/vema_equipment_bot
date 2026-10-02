@@ -59,3 +59,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   data        TEXT NOT NULL,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS category_kits (
+  category       TEXT PRIMARY KEY,
+  has_kit        BOOLEAN NOT NULL DEFAULT TRUE,
+  full_items     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  minimal_items  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_by     BIGINT,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

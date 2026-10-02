@@ -34,7 +34,8 @@ const {
 } = require('../helpers/equipmentHints');
 const { equipmentActionsTotal } = require('../../utils/metrics');
 const { formatDate } = require('../../utils/formatters');
-const { getGiveComponentsPreset } = require('../../utils/component-presets');
+const { handleCategoryKitInput } = require('./category-kit.handlers');
+const { getItemKit } = require('../../services/category-kit.service');
 
 const MAX_INPUT = 500;
 const DATE_RE = /^\d{2}\.\d{2}\.\d{4}$/;
@@ -383,7 +384,7 @@ async function handleGiveDuration(ctx, text, flow) {
 
   const expectedReturnDate = new Date();
   expectedReturnDate.setDate(expectedReturnDate.getDate() + durationDays);
-  const preset = getGiveComponentsPreset(equipment);
+  const preset = (await getItemKit(equipment)).preset;
 
   const selectionMessage = await ctx.reply(
     [
@@ -743,7 +744,7 @@ function registerFlowHandlers(bot) {
     const flow = ctx.session.flow;
     if (!flow) return next();
 
-    const menuLabels = [LABELS.categories, LABELS.myEquipment, LABELS.addEquipment, LABELS.summary, LABELS.profile];
+    const menuLabels = [LABELS.categories, LABELS.myEquipment, LABELS.addEquipment, LABELS.summary, LABELS.profile, LABELS.categoryKits];
     if (menuLabels.includes(text)) {
       resetFlow(ctx);
       return next();
@@ -766,6 +767,8 @@ function registerFlowHandlers(bot) {
         return handleEditEquipment(ctx, text, flow);
       case FLOW_TYPE.RETURN_LOCATION:
         return handleReturnLocation(ctx, text, flow);
+      case FLOW_TYPE.EDIT_CATEGORY_KIT:
+        return handleCategoryKitInput(ctx, text, flow);
       default:
         resetFlow(ctx);
         return next();

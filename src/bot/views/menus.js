@@ -18,7 +18,10 @@ function mainMenu(ctx) {
   const secondRow = [LABELS.summary, LABELS.profile];
   if (isEffectiveAdmin(ctx)) secondRow.push(LABELS.manageUsers);
 
-  return Markup.keyboard([firstRow, secondRow]).resize();
+  const rows = [firstRow, secondRow];
+  if (isEffectiveAdmin(ctx)) rows.push([LABELS.categoryKits]);
+
+  return Markup.keyboard(rows).resize();
 }
 
 function buildUserListKeyboard(users, page, totalPages) {
@@ -233,6 +236,37 @@ function buildGiveComponentsKeyboard(equipmentId, preset, selectedComponents = [
   return Markup.inlineKeyboard(rows);
 }
 
+function buildKitCategoryListKeyboard(categories, page, totalPages) {
+  const rows = categories.map((entry) => [
+    Markup.button.callback(`${entry.hasKit ? '🧰' : '🚫'} ${entry.name}`, `kitCategory_${entry.index}`),
+  ]);
+
+  const nav = [];
+  if (page > 0) nav.push(Markup.button.callback('⬅️', `kitPage_${page - 1}`));
+  if (page < totalPages - 1) nav.push(Markup.button.callback('➡️', `kitPage_${page + 1}`));
+  if (nav.length) rows.push(nav);
+
+  return Markup.inlineKeyboard(rows);
+}
+
+function buildCategoryKitKeyboard(index, kit) {
+  const rows = [
+    [Markup.button.callback(kit.hasKit ? '🚫 Выключить комплект' : '✅ Включить комплект', `kitToggle_${index}`)],
+  ];
+
+  if (kit.hasKit) {
+    rows.push([Markup.button.callback('✏️ Полный комплект', `kitEdit_${index}_full`)]);
+    rows.push([Markup.button.callback('✏️ Минимум', `kitEdit_${index}_minimal`)]);
+  }
+
+  if (kit.configured) {
+    rows.push([Markup.button.callback('♻️ Сбросить настройку', `kitReset_${index}`)]);
+  }
+
+  rows.push([Markup.button.callback('↩️ К категориям', 'kitPage_0')]);
+  return Markup.inlineKeyboard(rows);
+}
+
 function buildMyEquipmentKeyboard(items) {
   const rows = items.map((item) => [
     Markup.button.callback(
@@ -290,7 +324,9 @@ module.exports = {
   buildCategoryListKeyboard,
   buildEditEquipmentKeyboard,
   buildCategoryExportCallback,
+  buildCategoryKitKeyboard,
   buildGiveComponentsKeyboard,
+  buildKitCategoryListKeyboard,
   buildLocationRequestKeyboard,
   buildMyEquipmentKeyboard,
   buildMyEquipmentSelectionKeyboard,

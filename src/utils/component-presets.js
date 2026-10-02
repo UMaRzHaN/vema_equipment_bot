@@ -222,6 +222,70 @@ function requiresGiveComponents(item) {
   return !CATEGORIES_WITHOUT_COMPONENTS.some((key) => category.includes(key));
 }
 
+const KIT_MAX_ITEMS = 30;
+const KIT_MAX_NAME_LENGTH = 60;
+const KIT_EMPTY_INPUTS = new Set(["-", "нет", "пусто"]);
+
+// Parses admin input like "Штатив, Батарейка x2". Items with xN get +/- buttons when giving out.
+function parseKitInput(text) {
+  const raw = String(text || "").trim();
+  if (!raw || KIT_EMPTY_INPUTS.has(raw.toLowerCase())) return { items: [] };
+
+  const merged = new Map();
+  for (const part of raw.split(/[,;\n]/)) {
+    const value = part.trim();
+    if (!value) continue;
+
+    const match = /^(.+?)\s*[xхXХ×*]\s*(\d+)$/.exec(value);
+    const name = (match ? match[1] : value).trim();
+    const count = match ? Number(match[2]) : 1;
+
+    if (!name) continue;
+    if (name.length > KIT_MAX_NAME_LENGTH) {
+      return { error: `Слишком длинное название: «${name.slice(0, 20)}…». Максимум ${KIT_MAX_NAME_LENGTH} символов.` };
+    }
+    if (count < 1 || count > 99) {
+      return { error: `Количество для «${name}» должно быть от 1 до 99.` };
+    }
+    merged.set(name, { name, qty: count, counted: Boolean(match) });
+  }
+
+  if (merged.size > KIT_MAX_ITEMS) {
+    return { error: `Слишком много позиций. Максимум ${KIT_MAX_ITEMS}.` };
+  }
+
+  return { items: [...merged.values()] };
+}
+
+function formatKitItems(items = []) {
+  if (!items.length) return "—";
+  return items.map((item) => (item.counted ? `${item.name} x${item.qty}` : item.name)).join(", ");
+}
+
+// Converts a category_kits row into the preset shape used by the give-out keyboard.
+function buildPresetFromKit(kit) {
+  const full = Array.isArray(kit?.full_items) ? kit.full_items : [];
+  const minimal = Array.isArray(kit?.minimal_items) ? kit.minimal_items : [];
+
+  return {
+    single: full.filter((item) => !item.counted).map((item) => item.name),
+    quantity: full.filter((item) => item.counted).map((item) => item.name),
+    minimal: normalizePresetEntries(minimal),
+    full: normalizePresetEntries(full),
+    defaultQtyByName: getQtyMap(full),
+  };
+}
+
+// Converts a code preset into kit items, so admins start editing from the current defaults.
+function presetToKitItems(presetValue, entries) {
+  const quantityNames = new Set(presetValue?.quantity || []);
+  return normalizePresetEntries(entries).map((entry) => ({
+    name: entry.name,
+    qty: entry.qty,
+    counted: quantityNames.has(entry.name),
+  }));
+}
+
 function buildPresetComponents(entries = []) {
   return normalizePresetEntries(entries);
 }
@@ -234,8 +298,12 @@ function isQuantityComponent(name, presetValue) {
 
 module.exports = {
   buildPresetComponents,
+  buildPresetFromKit,
   detectCategoryKey,
+  formatKitItems,
   getGiveComponentsPreset,
   isQuantityComponent,
+  parseKitInput,
+  presetToKitItems,
   requiresGiveComponents,
 };
