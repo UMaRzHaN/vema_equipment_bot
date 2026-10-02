@@ -338,7 +338,7 @@ async function getSuggestionsForField(field, category = null, brand = null) {
      ${categoryFilter}
      ${brandFilter}
      ORDER BY value
-     LIMIT 6`,
+     LIMIT 100`,
     params,
   );
   return result.rows.map((r) => r.value).filter(Boolean);
