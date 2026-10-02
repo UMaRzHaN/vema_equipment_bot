@@ -21,7 +21,8 @@ const {
 } = require('../../services/category-kit.service');
 const { formatKitItems, parseKitInput } = require('../../utils/component-presets');
 
-const FIELD_LABELS = { full: 'полный комплект', minimal: 'минимум' };
+const FIELD_LABELS = { items: 'состав комплекта', full: 'полный комплект', minimal: 'минимум' };
+const FIELD_KEYS = { items: 'kitItems', full: 'fullItems', minimal: 'minimalItems' };
 
 function renderKitCard(kit) {
   const source = kit.configured ? 'настроено админом' : 'по умолчанию';
@@ -31,6 +32,7 @@ function renderKitCard(kit) {
     `🧰 Категория: ${kit.category}`,
     '',
     `Комплект: ${state} (${source})`,
+    `Состав комплекта: ${formatKitItems(kit.kitItems)}`,
     `Полный комплект: ${formatKitItems(kit.fullItems)}`,
     `Минимум: ${formatKitItems(kit.minimalItems)}`,
   ].join('\n');
@@ -94,14 +96,7 @@ async function handleCategoryKitInput(ctx, text, flow) {
   const parsed = parseKitInput(text);
   if (parsed.error) return ctx.reply(parsed.error);
 
-  const changes = field === 'full' ? { fullItems: parsed.items } : { minimalItems: parsed.items };
-  if (field === 'full') {
-    const names = new Set(parsed.items.map((item) => item.name));
-    const current = await getCategoryKit(category);
-    changes.minimalItems = current.minimalItems.filter((item) => names.has(item.name));
-  }
-
-  const kit = await saveCategoryKit(category, changes, ctx.from.id);
+  const kit = await saveCategoryKit(category, { [FIELD_KEYS[field]]: parsed.items }, ctx.from.id);
   const index = ctx.session.kitCategories?.indexOf(category) ?? -1;
   resetFlow(ctx);
 
@@ -157,7 +152,7 @@ function registerCategoryKitHandlers(bot) {
     return showKitCard(ctx, index);
   }, 'kitReset'));
 
-  bot.action(/^kitEdit_(\d+)_(full|minimal)$/, safe(async (ctx) => {
+  bot.action(/^kitEdit_(\d+)_(items|full|minimal)$/, safe(async (ctx) => {
     if (!isEffectiveAdmin(ctx)) { await ctx.answerCbQuery('Нет прав.', { show_alert: true }); return; }
     const index = Number(ctx.match[1]);
     const field = ctx.match[2];
@@ -170,7 +165,7 @@ function registerCategoryKitHandlers(bot) {
     await ctx.answerCbQuery();
     ensureSession(ctx);
     const kit = await getCategoryKit(category);
-    const current = field === 'full' ? kit.fullItems : kit.minimalItems;
+    const current = kit[FIELD_KEYS[field]];
 
     ctx.session.flow = makeFlow(FLOW_TYPE.EDIT_CATEGORY_KIT, 1, { category, field });
 
@@ -182,9 +177,10 @@ function registerCategoryKitHandlers(bot) {
         'Отправьте позиции через запятую. Для позиций с количеством добавьте xN:',
         'Штатив, Анемометр, Батарейка x2',
         '',
-        field === 'minimal'
-          ? 'Позиции, которых нет в полном комплекте, будут пропущены.'
-          : 'Чтобы очистить список, отправьте «-».',
+        field === 'items'
+          ? 'Это все позиции, которые можно выбрать при выдаче. Убранные позиции исчезнут и из «Полного» и «Минимума».'
+          : 'Новые позиции автоматически добавятся в состав комплекта.',
+        'Чтобы очистить список, отправьте «-».',
       ].join('\n'),
       buildBackKeyboard(),
     );

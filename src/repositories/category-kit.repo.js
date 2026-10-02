@@ -7,18 +7,26 @@ async function findCategoryKit(category) {
   return result.rows[0] || null;
 }
 
-async function upsertCategoryKit(category, { hasKit, fullItems, minimalItems, updatedBy }) {
+async function upsertCategoryKit(category, { hasKit, kitItems, fullItems, minimalItems, updatedBy }) {
   const result = await query(
-    `INSERT INTO category_kits (category, has_kit, full_items, minimal_items, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO category_kits (category, has_kit, kit_items, full_items, minimal_items, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
      ON CONFLICT (category) DO UPDATE
        SET has_kit = EXCLUDED.has_kit,
+           kit_items = EXCLUDED.kit_items,
            full_items = EXCLUDED.full_items,
            minimal_items = EXCLUDED.minimal_items,
            updated_by = EXCLUDED.updated_by,
            updated_at = NOW()
      RETURNING *`,
-    [category, hasKit, JSON.stringify(fullItems), JSON.stringify(minimalItems), updatedBy || null],
+    [
+      category,
+      hasKit,
+      JSON.stringify(kitItems),
+      JSON.stringify(fullItems),
+      JSON.stringify(minimalItems),
+      updatedBy || null,
+    ],
   );
   return result.rows[0];
 }

@@ -255,6 +255,7 @@ function buildCategoryKitKeyboard(index, kit) {
   ];
 
   if (kit.hasKit) {
+    rows.push([Markup.button.callback('✏️ Состав комплекта', `kitEdit_${index}_items`)]);
     rows.push([Markup.button.callback('✏️ Полный комплект', `kitEdit_${index}_full`)]);
     rows.push([Markup.button.callback('✏️ Минимум', `kitEdit_${index}_minimal`)]);
   }

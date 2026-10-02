@@ -13,6 +13,7 @@ const repoStub = {
     return {
       category,
       has_kit: data.hasKit,
+      kit_items: data.kitItems,
       full_items: data.fullItems,
       minimal_items: data.minimalItems,
     };
@@ -36,8 +37,10 @@ describe('getCategoryKit', () => {
 
     assert.equal(kit.configured, false);
     assert.equal(kit.hasKit, true);
+    assert.ok(kit.kitItems.some((item) => item.name === 'Кабель HDMI'));
+    assert.ok(kit.kitItems.some((item) => item.name === 'Батарейка' && item.counted));
     assert.ok(kit.fullItems.some((item) => item.name === 'Штатив'));
-    assert.ok(kit.fullItems.some((item) => item.name === 'Батарейка' && item.counted));
+    assert.ok(!kit.fullItems.some((item) => item.name === 'Кабель HDMI'));
   });
 
   it('keeps gas analyzers without a kit by default', async () => {
@@ -59,6 +62,7 @@ describe('getCategoryKit', () => {
 
     assert.equal(kit.configured, true);
     assert.deepEqual(kit.fullItems, [{ name: 'Кофр', qty: 1, counted: false }]);
+    assert.deepEqual(kit.kitItems, kit.fullItems, 'rows saved before kit_items use the full list');
   });
 });
 
@@ -76,6 +80,41 @@ describe('saveCategoryKit', () => {
     assert.deepEqual(kit.minimalItems, []);
     assert.equal(state.upserts[0].data.updatedBy, 42);
   });
+
+  it('removes items dropped from the composition from both presets', async () => {
+    state.row = {
+      category: 'Камера',
+      has_kit: true,
+      kit_items: [{ name: 'Кофр', qty: 1, counted: false }, { name: 'Штатив', qty: 1, counted: false }],
+      full_items: [{ name: 'Кофр', qty: 1, counted: false }, { name: 'Штатив', qty: 1, counted: false }],
+      minimal_items: [{ name: 'Штатив', qty: 1, counted: false }],
+    };
+
+    const kit = await service.saveCategoryKit('Камера', {
+      kitItems: [{ name: 'Кофр', qty: 1, counted: false }],
+    }, 1);
+
+    assert.deepEqual(kit.fullItems, [{ name: 'Кофр', qty: 1, counted: false }]);
+    assert.deepEqual(kit.minimalItems, []);
+  });
+
+  it('adds new preset items to the composition', async () => {
+    state.row = {
+      category: 'Камера',
+      has_kit: true,
+      kit_items: [{ name: 'Кофр', qty: 1, counted: false }],
+      full_items: [{ name: 'Кофр', qty: 1, counted: false }],
+      minimal_items: [],
+    };
+
+    const kit = await service.saveCategoryKit('Камера', {
+      minimalItems: [{ name: 'Батарейка', qty: 2, counted: true }],
+    }, 1);
+
+    assert.deepEqual(kit.kitItems.map((item) => item.name), ['Кофр', 'Батарейка']);
+    assert.deepEqual(kit.minimalItems, [{ name: 'Батарейка', qty: 2, counted: true }]);
+    assert.deepEqual(kit.fullItems, [{ name: 'Кофр', qty: 1, counted: false }]);
+  });
 });
 
 describe('getItemKit', () => {
@@ -91,6 +130,24 @@ describe('getItemKit', () => {
     state.row = { category: 'Камера', has_kit: true, full_items: [], minimal_items: [] };
 
     assert.equal((await service.getItemKit({ category: 'Камера' })).enabled, false);
+  });
+
+  it('offers the whole composition, not only the full preset', async () => {
+    state.row = {
+      category: 'Камера',
+      has_kit: true,
+      kit_items: [
+        { name: 'Кофр', qty: 1, counted: false },
+        { name: 'Кабель HDMI', qty: 1, counted: false },
+      ],
+      full_items: [{ name: 'Кофр', qty: 1, counted: false }],
+      minimal_items: [],
+    };
+
+    const kit = await service.getItemKit({ category: 'Камера' });
+
+    assert.deepEqual(kit.preset.single, ['Кофр', 'Кабель HDMI']);
+    assert.deepEqual(kit.preset.full, [{ name: 'Кофр', qty: 1 }]);
   });
 
   it('uses the configured kit for the give-out keyboard', async () => {

@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS category_kits (
   category       TEXT PRIMARY KEY,
   has_kit        BOOLEAN NOT NULL DEFAULT TRUE,
+  kit_items      JSONB NOT NULL DEFAULT '[]'::jsonb,
   full_items     JSONB NOT NULL DEFAULT '[]'::jsonb,
   minimal_items  JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_by     BIGINT,

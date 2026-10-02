@@ -263,16 +263,18 @@ function formatKitItems(items = []) {
 }
 
 // Converts a category_kits row into the preset shape used by the give-out keyboard.
+// kit_items is everything offered; full/minimal are the quick-select presets.
 function buildPresetFromKit(kit) {
   const full = Array.isArray(kit?.full_items) ? kit.full_items : [];
   const minimal = Array.isArray(kit?.minimal_items) ? kit.minimal_items : [];
+  const items = Array.isArray(kit?.kit_items) ? kit.kit_items : full;
 
   return {
-    single: full.filter((item) => !item.counted).map((item) => item.name),
-    quantity: full.filter((item) => item.counted).map((item) => item.name),
+    single: items.filter((item) => !item.counted).map((item) => item.name),
+    quantity: items.filter((item) => item.counted).map((item) => item.name),
     minimal: normalizePresetEntries(minimal),
     full: normalizePresetEntries(full),
-    defaultQtyByName: getQtyMap(full),
+    defaultQtyByName: { ...getQtyMap(items), ...getQtyMap(full) },
   };
 }
 
