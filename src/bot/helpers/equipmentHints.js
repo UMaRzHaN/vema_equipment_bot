@@ -2,16 +2,7 @@
 
 const { getSuggestionsForField } = require('../../repositories/equipment.repo');
 const logger = require('../../utils/logger');
-
-// Long hint lists are laid out in two columns so the keyboard stays compact.
-const TWO_COLUMN_THRESHOLD = 6;
-
-function chunkRows(values) {
-  if (values.length <= TWO_COLUMN_THRESHOLD) return values.map((v) => [v]);
-  const rows = [];
-  for (let i = 0; i < values.length; i += 2) rows.push(values.slice(i, i + 2));
-  return rows;
-}
+const { chunkRows } = require('../views/menus');
 
 async function buildSuggestionsKeyboard(field, category = null, brand = null) {
   try {

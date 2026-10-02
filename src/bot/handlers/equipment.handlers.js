@@ -298,10 +298,7 @@ async function promptAddMoreEquipment(ctx) {
   if (!categories.length) return ctx.reply('Нет категорий.', mainMenu(ctx));
   ensureSession(ctx);
   ctx.session.mode = 'list';
-  ctx.session.listPage = 0;
-  const pageItems = categories.slice(0, 8);
-  const totalPages = Math.max(Math.ceil(categories.length / 8), 1);
-  return ctx.reply('Выберите ещё оборудование:', buildCategoryListKeyboard(pageItems, 0, totalPages));
+  return ctx.reply('Выберите ещё оборудование:', buildCategoryListKeyboard(categories));
 }
 
 async function getCurrentUserEquipmentItems(ctx) {

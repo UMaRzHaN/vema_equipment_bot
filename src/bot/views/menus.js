@@ -96,14 +96,18 @@ function buildLocationRequestKeyboard() {
   ]).resize();
 }
 
-function buildCategoryListKeyboard(categories, page, totalPages) {
-  const keyboard = categories.map((name) => [name]);
-  const nav = [];
-  if (page > 0) nav.push(LABELS.previousPage);
-  if (page < totalPages - 1) nav.push(LABELS.nextPage);
-  if (nav.length) keyboard.push(nav);
-  keyboard.push([LABELS.back]);
-  return Markup.keyboard(keyboard).resize();
+// Long reply-keyboard lists are laid out in two columns so they stay compact.
+const TWO_COLUMN_THRESHOLD = 6;
+
+function chunkRows(values) {
+  if (values.length <= TWO_COLUMN_THRESHOLD) return values.map((v) => [v]);
+  const rows = [];
+  for (let i = 0; i < values.length; i += 2) rows.push(values.slice(i, i + 2));
+  return rows;
+}
+
+function buildCategoryListKeyboard(categories) {
+  return Markup.keyboard([...chunkRows(categories), [LABELS.back]]).resize();
 }
 
 function buildBrandListKeyboard(categoryName, brands, page, totalPages, pageOffset = 0) {
@@ -323,6 +327,7 @@ module.exports = {
   buildCategoryExportKeyboard,
   buildCategoryItemsKeyboard,
   buildCategoryListKeyboard,
+  chunkRows,
   buildEditEquipmentKeyboard,
   buildCategoryExportCallback,
   buildCategoryKitKeyboard,

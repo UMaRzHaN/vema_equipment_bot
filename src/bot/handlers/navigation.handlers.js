@@ -81,19 +81,15 @@ async function ensureRegistered(ctx) {
   return true;
 }
 
-async function renderCategoryMenu(ctx, page = 0) {
+async function renderCategoryMenu(ctx) {
   const categories = await listCategories();
   if (!categories.length) return ctx.reply('Нет категорий', mainMenu(ctx));
 
-  const { items, page: safePage, totalPages } = paginateList(categories, page);
   ensureSession(ctx);
   ctx.session.selectedCategory = null;
   ctx.session.selectedBrand = null;
 
-  if (ctx.session.mode === 'summary') ctx.session.summaryPage = safePage;
-  else ctx.session.listPage = safePage;
-
-  return ctx.reply('Выберите тип оборудования', buildCategoryListKeyboard(items, safePage, totalPages));
+  return ctx.reply('Выберите тип оборудования', buildCategoryListKeyboard(categories));
 }
 
 async function renderBrandMenu(ctx, categoryName, page = 0, editMessage = false) {
@@ -177,7 +173,7 @@ function registerNavigationHandlers(bot) {
     resetFlow(ctx);
     ensureSession(ctx);
     ctx.session.mode = 'list';
-    return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    return renderCategoryMenu(ctx);
   }, 'categories'));
 
   bot.hears(LABELS.summary, safe(async (ctx) => {
@@ -186,7 +182,7 @@ function registerNavigationHandlers(bot) {
     ensureSession(ctx);
     ctx.session.mode = 'summary';
     await ctx.reply(await buildSummaryText(), { parse_mode: 'HTML' });
-    return renderCategoryMenu(ctx, ctx.session.summaryPage || 0);
+    return renderCategoryMenu(ctx);
   }, 'summary'));
 
   bot.hears(LABELS.addEquipment, safe(async (ctx) => {
@@ -202,25 +198,12 @@ function registerNavigationHandlers(bot) {
     return ctx.reply(prompt.text, mergeWithBackKeyboard(prompt.options));
   }, 'addEquipment'));
 
-  bot.hears(LABELS.previousPage, safe(async (ctx) => {
+  // The category menu is no longer paginated; arrows from old keyboards just reopen it.
+  bot.hears([LABELS.previousPage, LABELS.nextPage], safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
     ensureSession(ctx);
-
-    const page = ctx.session.mode === 'summary'
-      ? Math.max((ctx.session.summaryPage || 0) - 1, 0)
-      : Math.max((ctx.session.listPage || 0) - 1, 0);
-    return renderCategoryMenu(ctx, page);
-  }, 'previousPage'));
-
-  bot.hears(LABELS.nextPage, safe(async (ctx) => {
-    if (!await ensureRegistered(ctx)) return;
-    ensureSession(ctx);
-
-    const page = ctx.session.mode === 'summary'
-      ? (ctx.session.summaryPage || 0) + 1
-      : (ctx.session.listPage || 0) + 1;
-    return renderCategoryMenu(ctx, page);
-  }, 'nextPage'));
+    return renderCategoryMenu(ctx);
+  }, 'categoryPage'));
 
   bot.hears(LABELS.back, safe(async (ctx) => {
     if (!await ensureRegistered(ctx)) return;
@@ -241,15 +224,14 @@ function registerNavigationHandlers(bot) {
       ctx.session.mode = 'list';
       ctx.session.selectedCategory = null;
       ctx.session.selectedBrand = null;
-      return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+      return renderCategoryMenu(ctx);
     }
 
     if (ctx.session.selectedCategory) {
       return renderBrandMenu(ctx, ctx.session.selectedCategory, ctx.session.brandPage || 0, true);
     }
 
-    const page = ctx.session.mode === 'summary' ? ctx.session.summaryPage || 0 : ctx.session.listPage || 0;
-    return renderCategoryMenu(ctx, page);
+    return renderCategoryMenu(ctx);
   }, 'back_categories'));
 
   bot.action(/^back_brandlist$/, safe(async (ctx) => {
@@ -258,7 +240,7 @@ function registerNavigationHandlers(bot) {
 
     ensureSession(ctx);
     const categoryName = ctx.session.selectedCategory;
-    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    if (!categoryName) return renderCategoryMenu(ctx);
     ctx.session.selectedCategory = categoryName;
     ctx.session.selectedBrand = null;
     return renderBrandMenu(ctx, categoryName, ctx.session.brandPage || 0, true);
@@ -268,7 +250,7 @@ function registerNavigationHandlers(bot) {
     await ctx.answerCbQuery();
     ensureSession(ctx);
     const categoryName = ctx.session.selectedCategory;
-    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    if (!categoryName) return renderCategoryMenu(ctx);
     const page = Number(ctx.match[1]) || 0;
     return renderBrandMenu(ctx, categoryName, page, true);
   }, 'brandPage'));
@@ -278,7 +260,7 @@ function registerNavigationHandlers(bot) {
 
     ensureSession(ctx);
     const categoryName = ctx.session.selectedCategory;
-    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    if (!categoryName) return renderCategoryMenu(ctx);
     const token = ctx.match[1];
     const brandName = token === 'all'
       ? null
@@ -306,7 +288,7 @@ function registerNavigationHandlers(bot) {
     ensureSession(ctx);
     const categoryName = ctx.session.selectedCategory;
     const brandName = ctx.session.selectedBrand || null;
-    if (!categoryName) return renderCategoryMenu(ctx, ctx.session.listPage || 0);
+    if (!categoryName) return renderCategoryMenu(ctx);
     const page = Number(ctx.match[1]) || 0;
     return renderEquipmentList(ctx, categoryName, brandName, page, true);
   }, 'itemsPage'));
