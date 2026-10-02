@@ -148,7 +148,9 @@ jobs:
             docker compose -f docker-compose.prod.yml pull app
 
             echo "=== Run migrations ==="
-            docker compose -f docker-compose.prod.yml run --rm migrate
+            # --build: the migrate image is built from the server checkout; without it
+            # compose reuses a stale image and new migrations never run.
+            docker compose -f docker-compose.prod.yml run --rm --build migrate
 
             echo "=== Verify DB integrity ==="
             docker compose -f docker-compose.prod.yml run --rm app node scripts/verify-integrity.js
